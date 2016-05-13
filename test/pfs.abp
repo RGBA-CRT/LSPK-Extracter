@@ -1,0 +1,206 @@
+'http://forum.xentax.com/viewtopic.php?f=10&t=5938
+#console
+#include<RGBALib.sbp>
+
+Type PFS_DIR_INFO
+	dirID AS DWord
+	parentID As DWord
+	start_child_dir As DWord
+	child_dir_count AS  DWord
+	start_child_file AS DWord
+	child_file_count aS DWord
+EndType
+
+Print "Last Story .pfs test programm   programmed by RGBA_CRT 2016"
+
+Dim pfs AS PFS_READER
+if pfs.LoadPfs("boot.pfs")=0 Then Print "Load ok"
+
+Print pfs.GetAllDirCount();"dirs exist"
+Print pfs.GetAllFileCount();"files exist"
+
+Dim i as Long,txtBuf[1024] AS Byte
+For i =0 To pfs.GetAllDirCount()-1
+	PrintDirInfo(i)
+Next i
+
+For i=0 To pfs.GetAllFileCount()+pfs.GetAllDirCount()-1
+	wsprintf(txtBuf,ex"\n[%03d] 0x%08X = %s",i,pfs.GetStrOffset(i),pfs.GetStr(i))
+	Print MakeStr(txtBuf);
+Next i
+
+Print 
+SloveDir(0,1)
+Sleep(-1)
+End
+
+
+'SloveDir
+Sub SloveDir(DirID AS DWord,HC aS Long )
+	Dim cur AS *PFS_DIR_INFO,child AS *PFS_DIR_INFO
+	cur=pfs.GetDirInfo(DirID)
+	if cur->child_dir_count=0 then ExitSub
+
+	if HC <= 1 Then printf(ex"TargetDir : %s(Root)\\\n DirCount : %d\n Root\\ \n",pfs.GetStr(DirID),cur->child_dir_count)
+
+	Dim i AS Long
+	For i = cur->start_child_dir To cur->start_child_dir+cur->child_dir_count-1
+		child=pfs.GetDirInfo(i)
+		if child->parentID=DirID Then
+			printf(ex"%s[%d,%d]%s\\\n",String$((HC+1)*2," "),DirID,i,pfs.GetStr(i))
+			SloveDir(i,HC+1)
+			ListUpFiles(i,HC+1)
+		Else
+			Print String$((HC+1)*2," ")+"ƒoƒO”­¶"
+		Endif
+	Next i
+EndSub
+
+Sub ListUpFiles(DirID AS DWord,HC aS Long )
+	Dim cur AS *PFS_DIR_INFO,child AS *PFS_DIR_INFO
+	cur=pfs.GetDirInfo(DirID)
+
+	Dim i AS Long
+	For i = cur->start_child_file To cur->start_child_file+cur->child_file_count-1
+		child=pfs.GetDirInfo(i)
+		printf(ex"%s[File,%d]%s\n",String$((HC+1)*2," "),i,pfs.GetFileStr(i))
+	Next i
+EndSub
+
+Sub PrintDirInfo(ID AS DWord)
+	Dim cur AS *PFS_DIR_INFO
+	cur=pfs.GetDirInfo(ID)
+	wsprintf(txtBuf,ex"\nDir Index.%d \n Name : %s\n dirID : %d\n ParentID : %d\n StartChildDir : %d\n ChildDirCount : %d\n StartChildFile : %d\n ChildFileCount : %d\n", _ 
+										ID,pfs.GetStr(ID),cur->dirID,cur->parentID,cur->start_child_dir,cur->child_dir_count,cur->start_child_file,cur->child_file_count)
+	Print MakeStr(txtBuf);
+EndSub
+
+
+
+ 
+
+/*
+	PFS:
+
+	Header
+	0x0 0x8 0x0
+	0x8 0x4 directory count
+	0xb 0x4 file count
+
+	Directory Table (1 entry per directory)
+	0x0 0x4 directory number
+	0x4 0x4 parent directory
+	0x8 0x4 start child directory
+	0xb 0x4 child directory count
+	0x10 0x4 start child file
+	0x14 0x4 child file count
+
+	String Offset Table (1 entry per directory or file)
+	0x0 0x4 offset in string table
+
+	String Table (1 entry per directory or file)
+	0x0 0x? name (null terminated)
+*/
+Class PFS_READER
+private
+	dir_count AS DWord
+	file_count AS DWord
+	dirInfo as *PFS_DIR_INFO	'(24 * num of dir) bytes
+	strOffsetTable AS *DWord
+	strTable AS BytePtr		'NULL TERMINATED
+Public
+	Sub ~PFS_READER()
+		Destroy()
+	EndSub
+
+	Sub Destroy()
+		dir_count=0
+		file_count=0
+		if dirInfo<>0 Then free(dirInfo):dirInfo=0
+		if strOffsetTable<>0 Then free(strOffsetTable):strOffsetTable=0
+		if strTable<>0 Then free(strTable):strTable=0
+	EndSub
+
+	Function LoadPfs(FileName As BytePtr) AS Long
+		Dim hFile AS HANDLE
+		hFile=OpenFile(FileName,GENERIC_READ)
+		if hFile=-1 Then hFile=0:LoadPfs=-1:ExitFunction
+
+		'init memory
+		Destroy()
+
+		'Load header area
+		SetFilePointer(hFile,8,NULL,FILE_BEGIN)
+		LoadFile(hFile,VarPtr(dir_count),sizeof(DWord))
+		LoadFile(hFile,VarPtr(file_count),sizeof(DWord))
+		ChangeEndianDW(dir_count)
+		ChangeEndianDW(file_count)
+		if dir_count=0 or file_count=0 Then LoadPfs=-1:ExitFunction
+
+		'Load directry info table
+		dirInfo=calloc((dir_count+1)*sizeof(PFS_DIR_INFO))
+		LoadFile(hFile,dirInfo,dir_count*sizeof(PFS_DIR_INFO))
+		For i = 0 To dir_count-1
+			ChangeEndianDW(dirInfo[i].child_dir_count)
+			ChangeEndianDW(dirInfo[i].child_file_count)
+			ChangeEndianDW(dirInfo[i].dirID)
+			ChangeEndianDW(dirInfo[i].parentID)
+			ChangeEndianDW(dirInfo[i].start_child_dir)
+			ChangeEndianDW(dirInfo[i].start_child_file)
+		Next i
+		'Print "[dir info table] file pointer : 0x"+Hex$(GetFilePointer(hFile))
+
+		'Load string offset table
+		strOffsetTable=calloc((dir_count+file_count+1)*sizeof(DWord))
+		LoadFile(hFile,strOffsetTable,(dir_count+file_count)*sizeof(DWord))
+		For i = 0 To dir_count+file_count-1
+			ChangeEndianDW(strOffsetTable[i])
+		Next i
+		Print "str table start : 0x"+Hex$(GetFilePointer(hFile))
+
+		'Load remain data
+		strTable=calloc(GetFileSize(hFile,NULL)-GetFilePointer(hFile)+10)
+		LoadFile(hFile,strTable,GetFileSize(hFile,NULL)-GetFilePointer(hFile))
+
+		Print "now file pointer : 0x"+Hex$(GetFilePointer(hFile))
+		CloseHandle(hFile)
+	EndFunction
+		
+	Function GetDirInfo(ID AS Long) AS *PFS_DIR_INFO
+		GetDirInfo=VarPtr(dirInfo[ID])
+	EndFunction
+
+	Function GetAllDirCount() AS Long
+		GetAllDirCount=dir_count
+	EndFunction
+
+	Function GetAllFileCount() AS Long
+		GetAllFileCount=file_count
+	EndFunction
+
+	Function GetStrOffset(ID As Long) AS DWord
+		GetStrOffset=strOffsetTable[ID]
+	EndFunction
+
+	Function GetStr(ID As Long) AS DWord
+		GetStr=strTable+strOffsetTable[ID]
+	EndFunction
+
+	Function GetFileStr(ID As Long) AS DWord
+		GetFileStr=strTable+strOffsetTable[ID+dir_count]
+	EndFunction
+End Class
+/*
+Sub ChangeEndianDW(ByRef in AS DWord)
+	Dim Tmp AS Byte
+	Dim value AS *Byte
+	value=VarPtr(in)
+	Tmp=value[0]
+	value[0]=value[3]
+	value[3]=Tmp
+	Tmp=value[1]
+	value[1]=value[2]
+	value[2]=Tmp
+EndSub
+*/
+	

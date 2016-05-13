@@ -1,0 +1,686 @@
+'TheLastStory pk pkh pfs Extractor	Programmed by RGBA_CRT 2016. Lang = ActiveBasic v4
+#include"RGBALib.sbp"
+#console
+
+Dim CS_ThreadCount As CRITICAL_SECTION,ThreadCount As DWord
+InitializeCriticalSection(CS_ThreadCount)
+Main()
+#ifdef _DEBUG
+	Sleep(-1)
+#else
+	End
+#endif
+
+Dim BaseDir As BytePtr
+Dim CurrentPath As BytePtr
+Dim DSDPath As BytePtr
+Dim hPack As HANDLE
+Dim noDecomp = FALSE As Byte
+Dim noExtract = FALSE As Byte
+Dim WAIT_ASYNC_DECODE = 50 AS Long
+Const DECODER_EXE_NAME = "DSDecmp.exe"
+
+Sub Main()
+	Print ex"The Last Story .pk .pkh .pfs Extracter              Programmed by RGBA_CRT 2016\n"
+
+	'DSDecmp.exeのファイルパスを取得して、存在を確認
+	MakeDSDPath()
+	if IsFilePath(DSDPath) = FALSE Then Print "DSDecmp.exe is not exist":debug:End
+
+	'コマンドラインから処理すべきファイル名を取得
+	Dim path As String , dPath As BytePtr
+	path=procCmdLine()
+	if IsFilePath(path)=FALSE Then
+		PrintUsage()
+		ExitSub
+	Endif
+	dPath=DelDQ(path)
+
+	'拡張子削除	boot.pk -> boot
+	Dim i As Long
+	For i= lstrlen(dPath) To 0 Step -1
+		if dPath[i]=Asc("\") Then ExitFor'拡張子なし
+		if dPath[i]=Asc(".") Then
+			dPath[i]=0
+			ExitFor
+		Endif
+	Next i
+
+	Dim pkh As PKH_READER
+	Dim pfs As PFS_READER
+
+	'Load file and check
+	if pkh.LoadPkhFile(MakeStr(dPath)+".pkh") <> 0 Then printf("File open error : %s.pkh",dPath):ExitSub
+	if pfs.LoadPfsFile(MakeStr(dPath)+".pfs") <> 0 Then	printf("File open error : %s.pfs",dPath):ExitSub
+	if pkh.GetFileCount() <> pfs.GetAllFileCount() Then printf("File count not match."):ExitSub
+	hPack=OpenFile(MakeStr(dPath)+".pk",GENERIC_READ)
+	if hPack = -1 Then printf("File open error : %s.pk",dPath):ExitSub
+
+/*	For i= lstrlen(dPath) To 0 Step -1
+		if dPath[i]=Asc("\") Then ExitFor
+	Next i
+	i++
+*/
+	'処理対象のフォルダをベースディレクトリとする
+	BaseDir=calloc(lstrlen(dPath)+MAX_PATH*2)
+	lstrcpy(BaseDir,dPath)
+	free(dPath)
+
+	if noExtract<>TRUE Then CreateDirectory(BaseDir,ByVal NULL)
+	lstrcat(BaseDir,"\")
+	CurrentPath=BaseDir+lstrlen(BaseDir)
+
+	'展開開始
+	Dim ret As Long
+	ret=SloveDir(VarPtr(pfs),VarPtr(pkh),0,1)
+	
+	free(DSDPath)
+	if noExtract=TRUE Then ExitSub
+	
+	'デコードスレッド待つ
+	Print
+	Print "Waiting for decoding files..."
+	Dim CmdPos As CONSOLE_SCREEN_BUFFER_INFO
+	GetConsoleScreenBufferInfo (_System_hConsoleOut,VarPtr(CmdPos))
+	Do
+		SetConsoleCursorPosition(_System_hConsoleOut,GetDWord(VarPtr(CmdPos.dwCursorPosition)))	
+		Print GetThreadCount();"       ";
+		if GetThreadCount() = 0 Then ExitDo
+		Sleep(5)
+	Loop
+	SetConsoleCursorPosition(_System_hConsoleOut,GetDWord(VarPtr(CmdPos.dwCursorPosition)))	
+	Print GetThreadCount();"       "
+
+	Print 
+	if ret=0 Then
+		Print "Extract successfull!!!"
+	Elseif ret > 0 Then
+		Print "Extracting is success. error count =";ret
+	Else
+		Print "Error?"
+	Endif
+EndSub
+
+Function procCmdLine() as String
+	Dim cmd AS CommandLine,i AS Long
+	For i = 1 To cmd.GetCount()
+		if cmd.cmpCmd(i,"/v") then
+			Print "PFS Viewer Mode."
+			noExtract=TRUE
+		Elseif cmd.cmpCmd(i,"/e") then
+			Print "Extract only Mode."
+			noDecomp=TRUE
+		Elseif cmd.cmpCmd(i,"/w") then
+			i++
+			WAIT_ASYNC_DECODE=Val(cmd.GetCmd(i))
+			if WAIT_ASYNC_DECODE=<0 then WAIT_ASYNC_DECODE=50
+			Print "wait =";WAIT_ASYNC_DECODE
+		Else
+			if IsFilePath(cmd.GetCmd(i))=TRUE Then
+				procCmdLine=cmd.GetCmdString(i)
+			endif
+		endif
+	Next i
+EndFunction
+
+Sub PrintUsage()
+	printf(ex"Usage : LSPK-Extract [/v][/e][/w num] pkfile\n\t/v - View directory/file tree.\n\t/e - extract only (do not decompless)\n\t/w - set wait for "+DECODER_EXE_NAME+ex"(ms)\n")
+EndSub
+
+Sub MakeDSDPath()
+	Dim Path[MAX_PATH] As Byte,i As Long
+
+	'自己のファイルパスを取得
+	GetModuleFileName(NULL,Path,MAX_PATH)
+	For i = lstrlen(Path) To 0 Step -1
+		If Path[i]=&H5C then ExitFor' \ だったら
+	Next i
+	Path[i+1]=0'￥以下を潰す
+
+	DSDPath=calloc(i+lstrlen(DECODER_EXE_NAME)+1+10)
+	wsprintf(DSDPath,"%s%s",Path,DECODER_EXE_NAME)
+EndSub
+
+'SloveDir
+Function SloveDir(pfs As *PFS_READER,pkh As *PFS_READER,DirID As DWord,HC As Long ) As Long
+	Dim cur As *PFS_DIR_INFO,child As *PFS_DIR_INFO
+
+	cur=pfs->GetDirInfo(DirID)
+	if cur->child_dir_count=0 then ExitSub
+
+	if HC <= 1 Then printf(ex"\nTargetDir : %s\n DirCount : %d\n (Root)\\ \n",BaseDir,cur->child_dir_count)
+
+	Dim i As Long
+	For i = cur->start_child_dir To cur->start_child_dir+cur->child_dir_count-1
+		child=pfs->GetDirInfo(i)
+		if child->parentID=DirID Then
+			'表示
+			printf(ex"%s[%d,%d,%d,%d]%s\\\n",String$((HC+1)*2," "),child->parentID,i,child->start_child_file,child->child_file_count,pfs->GetStr(i))
+
+			'子ディレクトリをカレントディレクトリに追加（進める）
+			PushDir(CurrentPath,pfs->GetStr(i))	
+
+			'ディレクトリ作成
+			if noExtract<>TRUE Then CreateDirectory(BaseDir,ByVal NULL)
+
+			'子ディレクトリをさらに調査（再帰）
+			SloveDir+=SloveDir(pfs,pkh,i,HC+1)=-1
+
+			'現在のフォルダのファイルをリストアップ
+			SloveDir+=ListUpFiles(pfs,pkh,i,HC+1)			
+			
+			'子ディレクトリをカレントディレクトリから削除
+			PopDir(CurrentPath)						
+		Else
+			Print String$((HC+1)*2," ")+"<<<<<<<<<<<< BUG or ERROR >>>>>>>>>>>>>>"
+		Endif
+	Next i
+EndFunction
+
+'パス+ファイル名のCRC32がPKHのHashに当たる
+'※PFSに記録されているパスの情報をもとにCRC32をとるときは、パスに含まれるすべての大文字を小文字に変換しないと、CRCが合わない！
+Function ListUpFiles(pfs As *PFS_READER,pkh As *PKH_READER,DirID As DWord,HC As Long ) As Long
+	Dim cur As *PFS_DIR_INFO,phk_struct As *PKH_FILE_DATA,index As Long
+	Dim pathBuf [MAX_PATH] As Byte
+	cur=pfs->GetDirInfo(DirID)
+	if cur->child_file_count=0 Then ExitSub
+
+	Dim i As Long
+	For i = cur->start_child_file To cur->start_child_file+cur->child_file_count-1
+		'パスを作成(すべて小文字に変換する)
+		wsprintf(pathBuf,"%s%s",CurrentPath,pfs->GetFileStr(i))
+
+		'ファイルパスからハッシュを作成、PKHテーブルを検索、PKHテーブルのインデックスを取得
+		index=pkh->GetTableIndexFromHash(crc32ls(pathBuf))
+		if index = -1 Then
+			printf(ex"%sFile not found  -> [File,%d,%08X] %s\n",String$((HC+1)*2," "),i,crc32str(pathBuf),pathBuf)
+			ListUpFiles++
+			Continue
+		endif
+
+		'インデックスからファイルデータを取得、展開
+		phk_struct=pkh->GetPKH_Table(index)
+		printf(ex"%s[File,%03d,%08X,%03dKB]%s\n",String$((HC+1)*2," "),i,phk_struct->hash,(pkh->GetDecSize(i)/1000) As Long,pfs->GetFileStr(i))
+
+		'保存用パスの作成
+		wsprintf(pathBuf,"%s%s",BaseDir,pfs->GetFileStr(i))
+		if noExtract<>TRUE Then
+				if phk_struct->com_size<>0 and phk_struct->dec_size=0 or phk_struct->com_size=0 Then	
+				'圧縮済みサイズが0以外で、解凍時サイズが0の場合、圧縮されてないと考える.
+				OutputPK(phk_struct->offset,phk_struct->com_size,pathBuf,TRUE)
+			Else
+				'解凍処理もする
+				OutputPK(phk_struct->offset,phk_struct->com_size,pathBuf,noDecomp)
+			endif
+		'	if noExtract<>TRUE Then OutputPK(phk_struct->offset,phk_struct->com_size,pathBuf,noDecomp)
+		endif
+
+	Next i
+EndFunction
+
+Sub PushDir(Base As BytePtr,SubDir As BytePtr)
+	lstrcat(Base,SubDir)
+	lstrcat(Base,"\")
+EndSub
+
+Sub PopDir(Base As BytePtr)
+	Dim i As Long
+	For i = lstrlen(Base)-2 To 0 Step -1
+		if Base[i]=Asc("\") Then	ExitFor
+	Next i
+	Base[i+1]=0
+EndSub
+
+Sub OutputPK(Address As DWord,CmpSize As DWord,FileName As BytePtr,notDec As Byte)
+	Dim pkBuf As BytePtr
+	SetFilePointer(hPack,Address,0,FILE_BEGIN)
+	pkBuf=calloc(CmpSize+2)
+	LoadFile(hPack,pkBuf,CmpSize)
+	if pkBuf[0]<>&H11 and CmpSize<>0 Then debug
+
+	Dim hOut As HANDLE
+	hOut=OpenFile(FileName,GENERIC_WRITE)
+	if hOut=-1 Then printf("File output error : %s",FileName):debug
+	OutFile(hOut,pkBuf,CmpSize)
+	CloseHandle(hOut)
+
+	if CmpSize=0 Then ExitSub
+
+	if notDec<>TRUE Then
+		Dim cmdLine[MAX_PATH] As Byte
+		wsprintf(cmdLine,"%s %s",DSDPath,FileName)
+		SirentExecAsync(cmdLine)
+	Endif
+EndSub
+
+Function SirentExec(ProgramName As BytePtr) As BytePtr
+	Dim read As HANDLE
+	Dim write As HANDLE
+	dim StartInfo As STARTUPINFO
+	Dim ProInfo As PROCESS_INFORMATION
+
+	FillMemory(VarPtr(StartInfo),sizeof(STARTUPINFO),0)
+	StartInfo.cb			=	sizeof(STARTUPINFO)
+	StartInfo.dwFlags		=	STARTF_USESTDHANDLES
+	StartInfo.wShowWindow	= 	SW_HIDE
+	StartInfo.hStdOutput	=	write
+	StartInfo.hStdError		=	write
+'	StartInfo.hStdInput		=	read
+
+	'スレッド数をインクリメント
+	ThreadCounterInc()
+
+	'実行
+	CreateProcess(NULL, ProgramName,ByVal NULL,ByVal NULL, TRUE, CREATE_NO_WINDOW, NULL,NULL, StartInfo, ProInfo )
+
+	'DSD終了待ち
+	WaitForSingleObject( ProInfo.hProcess, 5000 )
+
+	CloseHandle( ProInfo.hThread )
+	CloseHandle( ProInfo.hProcess )
+
+	CloseHandle( read )
+	CloseHandle( write )
+
+	'スレッド数をデクリメント
+	ThreadCounterDec()
+Endfunction
+
+'別スレッドで実行。全部終了したか確認するためにスレッドカウンタを用意。
+Sub SirentExecAsync(ProgramName As BytePtr) 
+	Dim dwTH As HANDLE
+	CreateThread(ByVal NULL,0,AddressOf(SirentExec),ProgramName,0,VarPtr(dwTH))
+	Sleep(WAIT_ASYNC_DECODE) '負荷低減
+End Sub
+
+Sub ThreadCounterInc()
+	EnterCriticalSection(CS_ThreadCount)
+		ThreadCount++
+	LeaveCriticalSection(CS_ThreadCount)
+EndSub
+
+Sub ThreadCounterDec()
+	EnterCriticalSection(CS_ThreadCount)
+		if ThreadCount=<0 Then 
+			Print "TC ERROR"
+		Else
+			ThreadCount--
+		Endif
+	LeaveCriticalSection(CS_ThreadCount)
+EndSub
+
+Function GetThreadCount() As DWord
+	EnterCriticalSection(CS_ThreadCount)
+		GetThreadCount=ThreadCount
+	LeaveCriticalSection(CS_ThreadCount)
+EndFunction
+
+'------------------------------------------------------------------------------
+'PKH PFS読み取り関数エリア
+/*
+Sub ChangeEndianDW(ByRef in As DWord)
+	Dim Tmp As Byte
+	Dim value As *Byte
+	value=VarPtr(in)
+	Tmp=value[0]
+	value[0]=value[3]
+	value[3]=Tmp
+	Tmp=value[1]
+	value[1]=value[2]
+	value[2]=Tmp
+EndSub*/
+
+'------------------------------------------------------------------------------
+Type PFS_DIR_INFO
+	dirID As DWord
+	parentID As DWord
+	start_child_dir As DWord
+	child_dir_count As  DWord
+	start_child_file As DWord
+	child_file_count As DWord
+EndType
+
+Class PFS_READER
+private
+	dir_count As DWord
+	file_count As DWord
+	dirInfo As *PFS_DIR_INFO	'(24 * num of dir) bytes
+	strOffsetTable As *DWord
+	strTable As BytePtr		'NULL TERMINATED
+Public
+	Sub ~PFS_READER()
+		Destroy()
+	EndSub
+
+	Sub Destroy()
+		dir_count=0
+		file_count=0
+		if dirInfo<>0 Then free(dirInfo):dirInfo=0
+		if strOffsetTable<>0 Then free(strOffsetTable):strOffsetTable=0
+		if strTable<>0 Then free(strTable):strTable=0
+	EndSub
+
+	Function LoadPfsFile(FileName As BytePtr) As Long
+		Dim hFile As HANDLE
+		hFile=OpenFile(FileName,GENERIC_READ)
+		if hFile=-1 Then hFile=0:LoadPfsFile=-1:ExitFunction
+
+		'init memory
+		Destroy()
+
+		'Load header area
+		SetFilePointer(hFile,8,NULL,FILE_BEGIN)
+		LoadFile(hFile,VarPtr(dir_count),sizeof(DWord))
+		LoadFile(hFile,VarPtr(file_count),sizeof(DWord))
+		ChangeEndianDW(dir_count)
+		ChangeEndianDW(file_count)
+		if dir_count=0 or file_count=0 Then LoadPfsFile=-1:ExitFunction
+
+		'Load directry info table
+		dirInfo=calloc((dir_count+1)*sizeof(PFS_DIR_INFO))
+		LoadFile(hFile,dirInfo,dir_count*sizeof(PFS_DIR_INFO))
+		Dim i As Long
+		For i = 0 To dir_count-1
+			ChangeEndianDW(dirInfo[i].child_dir_count)
+			ChangeEndianDW(dirInfo[i].child_file_count)
+			ChangeEndianDW(dirInfo[i].dirID)
+			ChangeEndianDW(dirInfo[i].parentID)
+			ChangeEndianDW(dirInfo[i].start_child_dir)
+			ChangeEndianDW(dirInfo[i].start_child_file)
+		Next i
+		'Print "[dir info table] file pointer : 0x"+Hex$(GetFilePointer(hFile))
+
+		'Load string offset table
+		strOffsetTable=calloc((dir_count+file_count+1)*sizeof(DWord))
+		LoadFile(hFile,strOffsetTable,(dir_count+file_count)*sizeof(DWord))
+		For i = 0 To dir_count+file_count-1
+			ChangeEndianDW(strOffsetTable[i])
+		Next i
+		Print "StringTableStart : 0x"+Hex$(GetFilePointer(hFile))
+
+		'Load remain data
+		strTable=calloc(GetFileSize(hFile,NULL)-GetFilePointer(hFile)+10)
+		LoadFile(hFile,strTable,GetFileSize(hFile,NULL)-GetFilePointer(hFile))
+
+		Print "PFS End of File  : 0x"+Hex$(GetFilePointer(hFile))
+		CloseHandle(hFile)
+	EndFunction
+		
+	Function GetDirInfo(ID As Long) As *PFS_DIR_INFO
+		GetDirInfo=VarPtr(dirInfo[ID])
+	EndFunction
+
+	Function GetAllDirCount() As Long
+		GetAllDirCount=dir_count
+	EndFunction
+
+	Function GetAllFileCount() As Long
+		GetAllFileCount=file_count
+	EndFunction
+
+	Function GetStrOffset(ID As Long) As DWord
+		GetStrOffset=strOffsetTable[ID]
+	EndFunction
+
+	Function GetStr(ID As Long) As DWord
+		GetStr=strTable+strOffsetTable[ID]
+	EndFunction
+
+	Function GetFileStr(ID As Long) As DWord
+		GetFileStr=strTable+strOffsetTable[ID+dir_count]
+	EndFunction
+End Class
+
+'---------------------------------------------------------------------------------------------
+Type PKH_FILE_DATA
+	hash As DWord
+	offset As DWord
+	dec_size As DWord
+	com_size As DWord
+EndType
+
+Class PKH_READER
+Private
+	cFile As DWord	'file count
+	PKH_Table As *PKH_FILE_DATA
+
+/*	'PKとPFSのテーブルはPKに格納されている順番なので、Unknown順にテーブルを並べ替える
+	Sub SortPKH_Table()
+	'	PKHQSort(0,cFile-1)
+	'	Print "PKH Table Sort Complate!"
+	EndSub
+
+	Sub PKHQSort(Left As DWord,Right As DWord)
+		Dim i As DWord, j As DWord, pivot As DWord
+		i=Left 	:	j=Right
+		pivot=PKH_Table[(Left+Right)/2].hash
+		
+		Do
+			While PKH_Table[i].hash<pivot
+				i++
+			Wend
+			While PKH_Table[j].hash>pivot
+				j--
+			Wend
+			if i>=j Then 
+				Exitdo
+			Else
+				SwapPKH_Table(i,j)
+				i++
+				j--
+			endif
+		Loop
+		if Left<i-1 Then PKHQSort(Left,i-1)
+		if j+1<Right Then PKHQSort(j+1,Right)
+	EndSub
+
+	Sub SwapPKH_Table(Index1 As Long,Index2 As Long)
+		Dim temp As PKH_FILE_DATA
+		'Index1 Save
+		memcpy(VarPtr(temp),VarPtr(PKH_Table[Index1]),sizeof(PKH_FILE_DATA))
+		'Index1 Set
+		memcpy(VarPtr(PKH_Table[Index1]),VarPtr(PKH_Table[Index2]),sizeof(PKH_FILE_DATA))
+		'Index2 Set from temp
+		memcpy(VarPtr(PKH_Table[Index2]),VarPtr(temp),sizeof(PKH_FILE_DATA))
+	EndSub
+*/
+Public
+
+	Sub ~PKH_READER()
+		Destroy()
+	EndSub
+
+	Sub Destroy()
+		cFile=0
+		if PKH_Table<>0 Then free(PKH_Table):PKH_Table=0
+	EndSub
+
+	Function LoadPkhFile(FileName As BytePtr) As Long
+		Dim hFile As HANDLE
+		hFile=OpenFile(FileName,GENERIC_READ)
+		if hFile=-1 or GetFileSize(hFile,NULL)<5 then LoadPkhFile=-1:Exitfunction
+
+		'Init Memory
+		Destroy()
+
+		'Load File Count
+		LoadFile(hFile,VarPtr(cFile),sizeof(DWord))
+		ChangeEndianDW(cFile)
+		if cFile*sizeof(PKH_FILE_DATA)+sizeof(DWord) <> GetFileSize(hFile,NULL) Then LoadPkhFile=-2:ExitFunction
+
+		'Load PKH_FILE_DATA (.pk file offset data)
+		PKH_Table=calloc(GetFileSize(hFile,NULL)+20)
+		LoadFile(hFile,PKH_Table,GetFileSize(hFile,NULL)-sizeof(DWord))
+		Dim i As Long
+		For i = 0 To cFile-1
+			ChangeEndianDW(PKH_Table[i].hash)
+			ChangeEndianDW(PKH_Table[i].offset)
+			ChangeEndianDW(PKH_Table[i].com_size)
+			ChangeEndianDW(PKH_Table[i].dec_size)
+		Next i
+
+		CloseHandle(hFile)
+
+		'PKH Table をソート
+		'SortPKH_Table()
+	EndFunction
+
+	Function GetPKH_Table(ID As DWord) As *PKH_FILE_DATA
+		GetPKH_Table=VarPtr(PKH_Table[ID])
+	EndFunction
+
+	Function GetFileCount() As Long
+		GetFileCount=cFile
+	EndFunction
+
+	Function GetOffset(ID As Long) As Long
+		GetOffset=PKH_Table[ID].offset
+	EndFunction
+
+	Function GetCmpSize(ID As Long) As Long
+		GetCmpSize=PKH_Table[ID].com_size
+	EndFunction
+
+	Function GetDecSize(ID As Long) As Long
+		GetDecSize=PKH_Table[ID].dec_size
+	EndFunction
+
+	Function GetHash(ID As Long) As Long
+		GetHash=PKH_Table[ID].hash
+	EndFunction
+
+	Function GetTableIndexFromHash(CRC32 As DWord) As Long
+		'二分探索
+		Dim pivot As DWord, top As DWord, bottom As DWord, i As DWord,dbg As DWord
+		top=0	:	bottom=cFile-1
+
+		Do
+			pivot = ( top + bottom ) / 2
+			if PKH_Table[pivot].hash=CRC32 Then
+'				if CRC32 = &H744172D3 As DWord then debug
+				'発見
+				GetTableIndexFromHash=pivot
+				ExitFunction
+				
+			Elseif PKH_Table[pivot].hash < CRC32 Then
+				'上半分を探索
+				top = pivot + 1
+
+			Else'if PKH_Table[pivot].hash > CRC32 Then
+				'下半分を検索
+				bottom = pivot - 1				
+
+			Endif
+
+			if dbg = pivot Then debug:Exitdo
+			dbg=pivot
+
+
+			if top > bottom Then ExitDo
+		Loop
+
+		GetTableIndexFromHash=-1
+	EndFunction
+
+End Class
+
+'----------------------------------------------------------------------
+
+'CRC32ノーマルのテーブル(CRC32bとは違う)。　main.dolの0x00737AD0あたりに同じくCRCテーブルがある。それと照合したが一致していた。
+'256 * 4bytes = 1024Byte
+Dim crc32tab[255] = [ 
+	&H00000000, &H04C11DB7, &H09823B6E, &H0D4326D9,
+	&H130476DC, &H17C56B6B, &H1A864DB2, &H1E475005,
+	&H2608EDB8, &H22C9F00F, &H2F8AD6D6, &H2B4BCB61,
+	&H350C9B64, &H31CD86D3, &H3C8EA00A, &H384FBDBD,
+	&H4C11DB70, &H48D0C6C7, &H4593E01E, &H4152FDA9,
+	&H5F15ADAC, &H5BD4B01B, &H569796C2, &H52568B75,
+	&H6A1936C8, &H6ED82B7F, &H639B0DA6, &H675A1011,
+	&H791D4014, &H7DDC5DA3, &H709F7B7A, &H745E66CD,
+	&H9823B6E0, &H9CE2AB57, &H91A18D8E, &H95609039,
+	&H8B27C03C, &H8FE6DD8B, &H82A5FB52, &H8664E6E5,
+	&HBE2B5B58, &HBAEA46EF, &HB7A96036, &HB3687D81,
+	&HAD2F2D84, &HA9EE3033, &HA4AD16EA, &HA06C0B5D,
+	&HD4326D90, &HD0F37027, &HDDB056FE, &HD9714B49,
+	&HC7361B4C, &HC3F706FB, &HCEB42022, &HCA753D95,
+	&HF23A8028, &HF6FB9D9F, &HFBB8BB46, &HFF79A6F1,
+	&HE13EF6F4, &HE5FFEB43, &HE8BCCD9A, &HEC7DD02D,
+	&H34867077, &H30476DC0, &H3D044B19, &H39C556AE,
+	&H278206AB, &H23431B1C, &H2E003DC5, &H2AC12072,
+	&H128E9DCF, &H164F8078, &H1B0CA6A1, &H1FCDBB16,
+	&H018AEB13, &H054BF6A4, &H0808D07D, &H0CC9CDCA,
+	&H7897AB07, &H7C56B6B0, &H71159069, &H75D48DDE,
+	&H6B93DDDB, &H6F52C06C, &H6211E6B5, &H66D0FB02,
+	&H5E9F46BF, &H5A5E5B08, &H571D7DD1, &H53DC6066,
+	&H4D9B3063, &H495A2DD4, &H44190B0D, &H40D816BA,
+	&HACA5C697, &HA864DB20, &HA527FDF9, &HA1E6E04E,
+	&HBFA1B04B, &HBB60ADFC, &HB6238B25, &HB2E29692,
+	&H8AAD2B2F, &H8E6C3698, &H832F1041, &H87EE0DF6,
+	&H99A95DF3, &H9D684044, &H902B669D, &H94EA7B2A,
+	&HE0B41DE7, &HE4750050, &HE9362689, &HEDF73B3E,
+	&HF3B06B3B, &HF771768C, &HFA325055, &HFEF34DE2,
+	&HC6BCF05F, &HC27DEDE8, &HCF3ECB31, &HCBFFD686,
+	&HD5B88683, &HD1799B34, &HDC3ABDED, &HD8FBA05A,
+	&H690CE0EE, &H6DCDFD59, &H608EDB80, &H644FC637,
+	&H7A089632, &H7EC98B85, &H738AAD5C, &H774BB0EB,
+	&H4F040D56, &H4BC510E1, &H46863638, &H42472B8F,
+	&H5C007B8A, &H58C1663D, &H558240E4, &H51435D53,
+	&H251D3B9E, &H21DC2629, &H2C9F00F0, &H285E1D47,
+	&H36194D42, &H32D850F5, &H3F9B762C, &H3B5A6B9B,
+	&H0315D626, &H07D4CB91, &H0A97ED48, &H0E56F0FF,
+	&H1011A0FA, &H14D0BD4D, &H19939B94, &H1D528623,
+	&HF12F560E, &HF5EE4BB9, &HF8AD6D60, &HFC6C70D7,
+	&HE22B20D2, &HE6EA3D65, &HEBA91BBC, &HEF68060B,
+	&HD727BBB6, &HD3E6A601, &HDEA580D8, &HDA649D6F,
+	&HC423CD6A, &HC0E2D0DD, &HCDA1F604, &HC960EBB3,
+	&HBD3E8D7E, &HB9FF90C9, &HB4BCB610, &HB07DABA7,
+	&HAE3AFBA2, &HAAFBE615, &HA7B8C0CC, &HA379DD7B,
+	&H9B3660C6, &H9FF77D71, &H92B45BA8, &H9675461F,
+	&H8832161A, &H8CF30BAD, &H81B02D74, &H857130C3,
+	&H5D8A9099, &H594B8D2E, &H5408ABF7, &H50C9B640,
+	&H4E8EE645, &H4A4FFBF2, &H470CDD2B, &H43CDC09C,
+	&H7B827D21, &H7F436096, &H7200464F, &H76C15BF8,
+	&H68860BFD, &H6C47164A, &H61043093, &H65C52D24,
+	&H119B4BE9, &H155A565E, &H18197087, &H1CD86D30,
+	&H029F3D35, &H065E2082, &H0B1D065B, &H0FDC1BEC,
+	&H3793A651, &H3352BBE6, &H3E119D3F, &H3AD08088,
+	&H2497D08D, &H2056CD3A, &H2D15EBE3, &H29D4F654,
+	&HC5A92679, &HC1683BCE, &HCC2B1D17, &HC8EA00A0,
+	&HD6AD50A5, &HD26C4D12, &HDF2F6BCB, &HDBEE767C,
+	&HE3A1CBC1, &HE760D676, &HEA23F0AF, &HEEE2ED18,
+	&HF0A5BD1D, &HF464A0AA, &HF9278673, &HFDE69BC4,
+	&H89B8FD09, &H8D79E0BE, &H803AC667, &H84FBDBD0,
+	&H9ABC8BD5, &H9E7D9662, &H933EB0BB, &H97FFAD0C,
+	&HAFB010B1, &HAB710D06, &HA6322BDF, &HA2F33668,
+	&HBCB4666D, &HB8757BDA, &HB5365D03, &HB1F740B4, ] As DWord
+
+
+Function crc32(data As BytePtr,len As DWord) As DWord
+	crc32 = &HFFFFFFFF
+	While len
+		crc32 = (crc32 << 8) xor crc32tab[(crc32 >> 24) xor ((data[0]) and &HFF)]
+		len--
+		data++
+	Wend
+
+	crc32 = NOT(crc32)
+EndFunction
+
+Function crc32str(str As BytePtr) As Long
+	crc32str=crc32(str,lstrlen(str))
+EndFunction
+
+'Windowsの'\'からPKの'/'へ置き換え、小文字化
+Function crc32ls(str As BytePtr) As DWord
+	Dim lower As BytePtr , leng As Long , i As long
+	leng=lstrlen(str)
+	lower=calloc(leng+1)
+	memcpy(lower,str,leng)
+	lower[leng]=0
+	CharLower(lower)
+	For i = 0 To leng
+		if lower[i]=Asc("\") Then lower[i]=Asc("/")
+	Next i
+	crc32ls=crc32(lower,leng)
+	free(lower)
+EndFunction
