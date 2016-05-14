@@ -1,4 +1,5 @@
-'RGBA_CRT's Librarys
+'RGBA_CRT's Library for ActiveBasic
+
 #include "RGBADef.sbp"
 /*  Todo : 
 		HTTP系をクラスに
@@ -459,7 +460,7 @@ Endfunction
 '		Class library
 '------------------------------
 
-'コマンドライン分割クラス
+'コマンドライン分割ライブラリ
 Class CommandLine
 private 
 	cmdStr As BytePtr
