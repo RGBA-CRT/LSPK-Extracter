@@ -1,7 +1,7 @@
 # LSPK-Extracter
 pk pkh pfs archive extractor for TheLastStory.
 
-使い方：
+# 使い方：
 	1.bin\LSPK-Extractor.zipをダウンロード、展開
 	2.pkファイルをLSPK-Extractor.exeにドラッグ
 	3.展開されます
