@@ -459,7 +459,7 @@ Endfunction
 '		Class library
 '------------------------------
 
-'コマンドライン分割ライブラリ
+'コマンドライン分割クラス
 Class CommandLine
 private 
 	cmdStr As BytePtr
