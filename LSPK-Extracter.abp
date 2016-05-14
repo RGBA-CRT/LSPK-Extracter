@@ -19,17 +19,26 @@ Dim noDecomp = FALSE As Byte
 Dim noExtract = FALSE As Byte
 Dim WAIT_ASYNC_DECODE = 50 AS Long
 Const DECODER_EXE_NAME = "DSDecmp.exe"
+Const MAX_THREAD_COUNT = 100
+Const WAIT_ASYNC_DECODE_LV2 = 1000
 
 Sub Main()
 	Print ex"The Last Story .pk .pkh .pfs Extracter              Programmed by RGBA_CRT 2016\n"
 
 	'DSDecmp.exeのファイルパスを取得して、存在を確認
 	MakeDSDPath()
-	if IsFilePath(DSDPath) = FALSE Then Print "DSDecmp.exe is not exist":debug:End
+	if IsFilePath(DSDPath) = FALSE Then 
+		Dim yn AS String
+		Input ex"DSDecmp.exe is not exist. Would you want to continue? (Y/N) \n> ",yn
+		if yn[0]<>Asc("y") and yn[0]<>Asc("Y") Then end
+	endif
 
 	'コマンドラインから処理すべきファイル名を取得
 	Dim path As String , dPath As BytePtr
 	path=procCmdLine()
+#ifdef _DEBUG
+	Input ex"D&D .pk file\n>",path :	dPath=DelDQ(path)
+#endif
 	if IsFilePath(path)=FALSE Then
 		PrintUsage()
 		ExitSub
@@ -200,14 +209,19 @@ Function ListUpFiles(pfs As *PFS_READER,pkh As *PKH_READER,DirID As DWord,HC As 
 
 		'インデックスからファイルデータを取得、展開
 		phk_struct=pkh->GetPKH_Table(index)
-		printf(ex"%s[File,%03d,%08X,%03dKB]%s\n",String$((HC+1)*2," "),i,phk_struct->hash,(pkh->GetDecSize(i)/1000) As Long,pfs->GetFileStr(i))
+		printf(ex"%s[File,%03d,%08X,%03dKB]%s\n",String$((HC+1)*2," "),i,phk_struct->hash,(phk_struct->dec_size/1000) As Long,pfs->GetFileStr(i))
 
 		'保存用パスの作成
 		wsprintf(pathBuf,"%s%s",BaseDir,pfs->GetFileStr(i))
 		if noExtract<>TRUE Then
-				if phk_struct->com_size<>0 and phk_struct->dec_size=0 or phk_struct->com_size=0 Then	
-				'圧縮済みサイズが0以外で、解凍時サイズが0の場合、圧縮されてないと考える.
+			if phk_struct->com_size<>0 and phk_struct->dec_size=0  Then	
+				'com_sizeが0以外で、dec_sizeが0の場合、圧縮されてないと考える。
 				OutputPK(phk_struct->offset,phk_struct->com_size,pathBuf,TRUE)
+
+			Elseif phk_struct->com_size=0 and phk_struct->dec_size<>0 Then
+				'cmp_sizeが0で、dec_sizeファイルサイズは0以外の場合、ファイルサイズをdec_sizeとする済みサイズを参考に知る
+				OutputPK(phk_struct->offset,phk_struct->dec_size,pathBuf,TRUE)
+
 			Else
 				'解凍処理もする
 				OutputPK(phk_struct->offset,phk_struct->com_size,pathBuf,noDecomp)
@@ -236,7 +250,7 @@ Sub OutputPK(Address As DWord,CmpSize As DWord,FileName As BytePtr,notDec As Byt
 	SetFilePointer(hPack,Address,0,FILE_BEGIN)
 	pkBuf=calloc(CmpSize+2)
 	LoadFile(hPack,pkBuf,CmpSize)
-	if pkBuf[0]<>&H11 and CmpSize<>0 Then debug
+'	if pkBuf[0]<>&H11 and CmpSize<>0 Then debug
 
 	Dim hOut As HANDLE
 	hOut=OpenFile(FileName,GENERIC_WRITE)
@@ -274,7 +288,7 @@ Function SirentExec(ProgramName As BytePtr) As BytePtr
 	CreateProcess(NULL, ProgramName,ByVal NULL,ByVal NULL, TRUE, CREATE_NO_WINDOW, NULL,NULL, StartInfo, ProInfo )
 
 	'DSD終了待ち
-	WaitForSingleObject( ProInfo.hProcess, 5000 )
+	WaitForSingleObject( ProInfo.hProcess, 3600000 )
 
 	CloseHandle( ProInfo.hThread )
 	CloseHandle( ProInfo.hProcess )
@@ -288,6 +302,8 @@ Endfunction
 
 '別スレッドで実行。全部終了したか確認するためにスレッドカウンタを用意。
 Sub SirentExecAsync(ProgramName As BytePtr) 
+	WaitForThreadOver()
+
 	Dim dwTH As HANDLE
 	CreateThread(ByVal NULL,0,AddressOf(SirentExec),ProgramName,0,VarPtr(dwTH))
 	Sleep(WAIT_ASYNC_DECODE) '負荷低減
@@ -297,6 +313,14 @@ Sub ThreadCounterInc()
 	EnterCriticalSection(CS_ThreadCount)
 		ThreadCount++
 	LeaveCriticalSection(CS_ThreadCount)
+EndSub
+
+Sub WaitForThreadOver()
+	Do
+		if GetThreadCount() < MAX_THREAD_COUNT Then ExitDo
+		Print "wait...."';GetThreadCount()
+		Sleep(WAIT_ASYNC_DECODE_LV2)
+	Loop
 EndSub
 
 Sub ThreadCounterDec()

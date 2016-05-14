@@ -8,8 +8,13 @@ Dim hPack As HANDLE
 Sub Main()
 	Print "The Last Story .pk Extracter              Programmed by RGBA_CRT 2016"
 
-	if IsFilePath("DSDecmp.exe") = FALSE Then Print "DSDecmp.exe is not exist":End
-
+	if IsFilePath("DSDecmp.exe") = FALSE Then 
+		Dim yn AS String
+		Input ex"DSDecmp.exe is not exist. Would you want to continue? (Y/N) \n> ",yn
+		if yn[0]<>Asc("y") and yn[0]<>Asc("Y") Then end
+	endif
+		
+		
 	Dim path As String , dPath As BytePtr
 	Input ex"D&D .pk file\n>",path
 '	path="camp.ddd"
