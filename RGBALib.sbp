@@ -920,3 +920,38 @@ Function Lit2Big(Data As Word) As Dword
 	big[1]=In[0]
 	memcpy(VarPtr(Lit2Big),big,2)
 EndFunction
+
+'Path Ç…ÉpÉXÅAModeÇ…GENERIC_READÇ©GENERIC_WRITE
+Function OpenFile(Path As BytePtr,_Mode AS DWORD) AS HANDLE
+     Dim CreateMode AS Dword
+     If _Mode=GENERIC_READ then
+          CreateMode=OPEN_EXISTING
+	Elseif  _Mode=GENERIC_WRITE then
+		CreateMode=CREATE_ALWAYS
+     Else
+          CreateMode=OPEN_ALWAYS
+     EndIf
+     OpenFile=CreateFile(Path, _Mode, FILE_SHARE_READ, ByVal 0,CreateMode, FILE_ATTRIBUTE_NORMAL, 0)
+     If OpenFile=INVALID_HANDLE_VALUE then OpenFile = -1 As VoidPtr
+EndFunction
+
+Function LoadFile(hFile As HANDLE,DataPtr As BytePtr,Size As DWORD) As BytePtr
+     Dim dwAB As BytePtr
+     LoadFile=ReadFile(hFile,DataPtr,Size,VarPtr(dwAB),ByVal NULL) As BytePtr
+     If LoadFile=TRUE And dwAB=0 then
+          LoadFile=-1 As BytePtr
+     ElseIf LoadFile=FALSE then
+          LoadFile=-2 As BytePtr
+     Else
+          LoadFile=DataPtr
+     EndIf
+EndFunction
+
+Function OutFile(hFile As HANDLE,DataPtr As BytePtr,Size As DWORD)
+     Dim dwAB As BytePtr
+     OutFile=WriteFile(hFile,DataPtr,Size,VarPtr(dwAB),ByVal NULL)
+EndFunction
+
+Function GetFilePointer(hFile As HANDLE) As DWORD
+     GetFilePointer=SetFilePointer(hFile,0,0,FILE_CURRENT)
+EndFunction
