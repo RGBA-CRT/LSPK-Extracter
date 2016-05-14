@@ -1,24 +1,24 @@
 # LSPK-Extracter
 pk pkh pfs archive extractor for TheLastStory.
 
-Žg‚¢•ûF
-	1.bin\LSPK-Extractor.zip‚ðƒ_ƒEƒ“ƒ[ƒhA“WŠJ
-	2.pkƒtƒ@ƒCƒ‹‚ðLSPK-Extractor.exe‚Éƒhƒ‰ƒbƒO
-	3.“WŠJ‚³‚ê‚Ü‚·
+ä½¿ã„æ–¹ï¼š
+	1.bin\LSPK-Extractor.zipã‚’ãƒ€ã‚¦ãƒ³ãƒ­ãƒ¼ãƒ‰ã€å±•é–‹
+	2.pkãƒ•ã‚¡ã‚¤ãƒ«ã‚’LSPK-Extractor.exeã«ãƒ‰ãƒ©ãƒƒã‚°
+	3.å±•é–‹ã•ã‚Œã¾ã™
 
 
-ƒRƒ}ƒ“ƒhƒ‰ƒCƒ“‚ÅŽg‚¤ê‡‚Ì—áF
+ã‚³ãƒžãƒ³ãƒ‰ãƒ©ã‚¤ãƒ³ã§ä½¿ã†å ´åˆã®ä¾‹ï¼š
 	> ls
 	LSPK-Extractor.exe	DSDecmp.exe	boot.pk	boot.pkh	boot.pfs
-		
+	
 	> LSPK-Extractor.exe boot.pk
 
-ƒtƒ@ƒCƒ‹ƒtƒH[ƒ}ƒbƒg‚É‚Â‚¢‚Ä‚ÍˆÈ‰º‚ð‚²——‚­‚¾‚³‚¢B
+ãƒ•ã‚¡ã‚¤ãƒ«ãƒ•ã‚©ãƒ¼ãƒžãƒƒãƒˆã«ã¤ã„ã¦ã¯ä»¥ä¸‹ã‚’ã”è¦§ãã ã•ã„ã€‚
 	http://forum.xentax.com/viewtopic.php?f=10&t=5938
 	http://rgbacrt.seesaa.net/article/437742154.html
 
 
 
-ActiveBasic ver4‚Å‘‚©‚ê‚Ä‚¢‚Ü‚·B
-ƒRƒ“ƒpƒCƒ‹‚Å‚«‚È‚¢ê‡‚Í˜A—‚µ‚Ä‚­‚¾‚³‚¢B
+ActiveBasic ver4ã§æ›¸ã‹ã‚Œã¦ã„ã¾ã™ã€‚
+ã‚³ãƒ³ãƒ‘ã‚¤ãƒ«ã§ããªã„å ´åˆã¯é€£çµ¡ã—ã¦ãã ã•ã„ã€‚
 
