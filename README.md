@@ -10,7 +10,7 @@ pk pkh pfs archive extractor for TheLastStory.
 コマンドラインで使う場合の例：
 	> ls
 	LSPK-Extractor.exe	DSDecmp.exe	boot.pk	boot.pkh	boot.pfs
-		
+	
 	> LSPK-Extractor.exe boot.pk
 
 ファイルフォーマットについては以下をご覧ください。
