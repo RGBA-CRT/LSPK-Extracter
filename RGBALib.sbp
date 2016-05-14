@@ -12,11 +12,11 @@ Sub PumpMessage()
   	Wend
 EndSub
 
-Function GetDlgItemHex(hWnd AS HWND) AS Long
-	Dim buf as BytePtr
+Function GetDlgItemHex(hWnd As HWND) As Long
+	Dim buf As BytePtr
 	buf=calloc(GetWindowTextLength(hWnd)+5)
 	GetWindowText(hWnd,buf,GetWindowTextLength(hWnd)+1)
-	Dim i as Long,mode as Long
+	Dim i As Long,mode As Long
 	Do
 		if buf[i]=&H20 Then 
 			i++
@@ -29,20 +29,20 @@ Function GetDlgItemHex(hWnd AS HWND) AS Long
 		endif
 		ExitDo		
 	Loop
-	GetDlgItemHex=Val(buf+i) AS Long
+	GetDlgItemHex=Val(buf+i) As Long
 	free(buf)
 EndFunction
 
 'エラーメッセージ表示
-Function ErrMes(hOwner AS HWND,Text As BytePtr,Title As BytePtr,Flag As Dword) As Long
+Function ErrMes(hOwner As HWND,Text As BytePtr,Title As BytePtr,Flag As Dword) As Long
 	SetForegroundWindow(hOwner)
 	MessageBeep(MB_ICONHAND)
 	ErrMes=MessageBox(hOwner,Text,ProgramName+" - "+MakeStr(Title),MB_ICONERROR Or Flag)
 EndFunction
 
 'EXEC 終了コード取得
-Function RunAndGetExitCode(App As BytePtr,CmdLine As BytePtr) AS Long
-	Dim si AS STARTUPINFO 
+Function RunAndGetExitCode(App As BytePtr,CmdLine As BytePtr) As Long
+	Dim si As STARTUPINFO 
 	Dim pi As PROCESS_INFORMATION
 	Dim Child As HANDLE
 	Dim r As DWORD
@@ -102,7 +102,7 @@ Function Dw2Str(Data As DWORD) As String
 EndFunction
 
 'InStrのバイナリ版
-Function InByteBin(Data As BytePtr,Size As DWORD,Bytes As Byte)(Jump AS Long) As Long
+Function InByteBin(Data As BytePtr,Size As DWORD,Bytes As Byte)(Jump As Long) As Long
 	Dim i As DWORD,tmp As Byte
 	if Jump<>0 then i=Jump
 	Do
@@ -118,7 +118,7 @@ Function SerchTextLine(Src As BytePtr,Text As BytePtr,sLen As DWORD,isFirst As D
 	Dim tLen As DWORD'(,sLen As DWORD
 	Dim i As DWORD,j As Long,k As Long
 	Dim letSkip As Byte, letLast As Byte
-	Dim SP AS Long
+	Dim SP As Long
 	tLen=lstrlen(Text)
 	if tLen=0 then 	SerchTextLine=FALSE:	ExitFunction
 	For i=0 To 255 : Skip[i]=tLen :	Next i
@@ -164,7 +164,7 @@ Function SerchTextLine(Src As BytePtr,Text As BytePtr,sLen As DWORD,isFirst As D
 EndFunction
 
 Function InStrByte(Data As BytePtr,Serch As Byte,DataSize As DWORD) As Long
-	Dim i as DWORD,si As Dword, sLen As Long
+	Dim i As DWORD,si As Dword, sLen As Long
 	'Dim tmp1 As Byte,tmp2 As Byte
 	'sLen=lstrlen(Serch)
 	Do
@@ -184,20 +184,20 @@ endfunction
 
 'APIを使った高速バージョンのダブルクォーテーション抜き
 Function DelDQ(Text As BytePtr) As BytePtr
-	Dim tmp[MAX_PATH] AS Byte
+	Dim tmp[MAX_PATH] As Byte
 	lstrcpy(tmp,Text)
 	PathRemoveBlanks(tmp)
 	PathUnquoteSpaces(tmp)
 
-	Dim txlen AS DWord
+	Dim txlen As DWord
 	txlen=lstrlen(tmp)
 	DelDQ=calloc(txlen+2)
 	memcpy(DelDQ,tmp,txlen+1)
 EndFunction
 
 'ファイルパスが正しいかチェック
-Function IsFilePath(FilePath AS BytePtr) As Byte
-	Dim hFile AS HANDLE
+Function IsFilePath(FilePath As BytePtr) As Byte
+	Dim hFile As HANDLE
 	hFile=CreateFile(FilePath,GENERIC_READ,FILE_SHARE_READ OR FILE_SHARE_WRITE,ByVal NULL,OPEN_EXISTING,FILE_ATTRIBUTE_NORMAL,NULL)
 	If hFile=INVALID_HANDLE_VALUE Then
 		IsFilePath=FALSE
@@ -207,7 +207,7 @@ Function IsFilePath(FilePath AS BytePtr) As Byte
 	EndIf
 EndFunction
 
-Function win_strcmpi(str1 AS BytePtr,str2 AS BytePtr,Length AS DWord) AS BOOL
+Function win_strcmpi(str1 As BytePtr,str2 As BytePtr,Length As DWord) As BOOL
 	if CompareString(LOCALE_SYSTEM_DEFAULT,NORM_IGNORECASE,str1,Length,str2,Length) = CSTR_EQUAL Then
 		win_strcmpi=TRUE
 	Else
@@ -215,7 +215,7 @@ Function win_strcmpi(str1 AS BytePtr,str2 AS BytePtr,Length AS DWord) AS BOOL
 	endif
 EndFunction
 
-Function win_strcmp(str1 AS BytePtr,str2 AS BytePtr,Length AS DWord) AS BOOL
+Function win_strcmp(str1 As BytePtr,str2 As BytePtr,Length As DWord) As BOOL
 	if CompareString(LOCALE_SYSTEM_DEFAULT,0,str1,Length,str2,Length) = CSTR_EQUAL Then
 		win_strcmp=TRUE
 	Else
@@ -237,7 +237,7 @@ Function URLDecode(pFrom As BytePtr) As BytePtr
 
    Do 
 		if pFrom[i]=&H25 Then '% then
-			ASCII=Hex2Dec(Chr$(pFrom[i+1])+Chr$(pFrom[i+2])) AS Byte
+			ASCII=Hex2Dec(Chr$(pFrom[i+1])+Chr$(pFrom[i+2])) As Byte
 			lstrcat(URLDecode , Chr$(ASCII))
 			i=i+2
 		Else
@@ -249,7 +249,7 @@ Function URLDecode(pFrom As BytePtr) As BytePtr
 End Function
 
 Function GetHttpStatusText(HttpStatusNo As Long)
-	Dim STATUS AS BytePtr
+	Dim STATUS As BytePtr
 
 	'出典：http://www.tohoho-web.com/ex/http.htm
 	Select Case HttpStatusNo
@@ -307,13 +307,13 @@ End Function
 '		Console library
 '------------------------------
 
-Function GetConsoleCursorDw() AS DWord
+Function GetConsoleCursorDw() As DWord
 	Dim CmdPos As CONSOLE_SCREEN_BUFFER_INFO
 	GetConsoleScreenBufferInfo (_System_hConsoleOut,VarPtr(CmdPos))
 	memcpy(VarPtr(GetConsoleCursor),CmdPos.dwCursorPosition,sizeof(DWord))
 EndFunction
 
-SUb GetConsoleCursor(ByRef pos AS COORD)
+SUb GetConsoleCursor(ByRef pos As COORD)
 	Dim CmdPos As CONSOLE_SCREEN_BUFFER_INFO
 	GetConsoleScreenBufferInfo (_System_hConsoleOut,VarPtr(CmdPos))
 	memcpy(VarPtr(pos),VarPtr(CmdPos.dwCursorPosition),sizeof(DWord))
@@ -326,7 +326,7 @@ Sub ConsoleReturnLine()
 	SetConsoleCursorPosition(_System_hConsoleOut,GetDWord(VarPtr(CmdPos.dwCursorPosition)))	
 EndSub
 
-Sub ConsoleReturnChar(count AS Long)
+Sub ConsoleReturnChar(count As Long)
 	Dim CmdPos As CONSOLE_SCREEN_BUFFER_INFO
 	GetConsoleScreenBufferInfo (_System_hConsoleOut,VarPtr(CmdPos))
 	CmdPos.dwCursorPosition.X-=count
@@ -334,7 +334,7 @@ Sub ConsoleReturnChar(count AS Long)
 EndSub
 
 'コンソールのウィンドウハンドルを取得
-Function GetConsoleWndHandle() AS HANDLE
+Function GetConsoleWndHandle() As HANDLE
 	dim hConsole As HWND
 	SetConsoleTitle("_FIND_STRING_RGBA_CRT_") 
 	Sleep(40) 
@@ -342,13 +342,13 @@ Function GetConsoleWndHandle() AS HANDLE
 EndFunction
 
 'コンソールのアイコンを変更
-Sub SetConsoleIcon(IconID AS DWord)
+Sub SetConsoleIcon(IconID As DWord)
 	SendMessage(GetConsoleWndHandle(),WM_SETICON,ICON_SMALL,LoadImage(GetModuleHandle(0),IconID As BytePtr,IMAGE_ICON,GetSystemMetrics(SM_CXSMICON),GetSystemMetrics(SM_CYSMICON),LR_DEFAULTCOLOR) As Long)
 EndSub
 
 Const PRINTF_BUFFER = 1024*10
 Sub printf(lpFormat As BytePtr)(a As DWord ,b As DWord ,c As DWord ,d As DWord ,e As DWord ,f As DWord ,g As DWord ,h As DWord ,i As DWord ,j As DWord ,k As DWord ,l As DWord ,m As DWord ,n As DWord )
-	Dim Buf AS BytePtr,ret AS Long,Ptr[13] AS DWord
+	Dim Buf As BytePtr,ret As Long,Ptr[13] As DWord
 	Buf=calloc(lstrlen(lpFormat)+PRINTF_BUFFER)
 	if Buf=0 Then MessageBox(0,ex"RGBALib - Line 37\nメモリ確保に失敗しました。",0,0)
 '	Ptr[0]=a:	Ptr[1]=b:	Ptr[2]=c:	Ptr[3]=d:	Ptr[4]=e:	Ptr[5]=f:	Ptr[6]=g:	Ptr[7]=h:	Ptr[8]=i:	Ptr[9]=j:	Ptr[10]=k:		Ptr[11]=l:		Ptr[12]=m:		Ptr[13]=n:	
@@ -358,16 +358,16 @@ Sub printf(lpFormat As BytePtr)(a As DWord ,b As DWord ,c As DWord ,d As DWord ,
 	free(Buf)	
 EndSub
 
-Sub PrintPtr(Text As BytePtr)(Length AS Long)
-	Dim a AS Long
+Sub PrintPtr(Text As BytePtr)(Length As Long)
+	Dim a As Long
 	if Length=0 then Length=lstrlen(Text)
 	WriteFile(_System_hConsoleOut,Text,Length,VarPtr(Length),ByVal NULL)
 '	WriteConsole(GetStdHandle(STD_OUTPUT_HANDLE),Text,Length,NULL
 Endsub
 
 Sub StringArrayViewer(Data As *Byte)
-	dim i as long
-	dim L as long
+	dim i As long
+	dim L As long
 	Dim Tx[2] As Byte
 	dim TB As byte
 
@@ -414,7 +414,7 @@ Sub StringArrayViewer(Data As *Byte)
 	Print ex"\n"
 Endsub
 
-Function Dump(Data As BytePtr,Size As DWORD)(VAdr As DWORD,ShowHeader AS BOOL) AS DWORD
+Function Dump(Data As BytePtr,Size As DWORD)(VAdr As DWORD,ShowHeader As BOOL) As DWORD
 	Dim Tmp[&H20] As Byte,i As Long,Adr As DWORD
 	
 	SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), BACKGROUND_BLUE OR BACKGROUND_GREEN OR BACKGROUND_RED)
@@ -462,9 +462,9 @@ Endfunction
 'コマンドライン分割ライブラリ
 Class CommandLine
 private 
-	cmdStr AS BytePtr
-	count as Long
-	table AS *BytePtr
+	cmdStr As BytePtr
+	count As Long
+	table As *BytePtr
 
 	Sub Destroy()
 		if cmdStr<>0 Then free(cmdStr):cmdStr=0
@@ -472,9 +472,9 @@ private
 		count=0
 	EndSub
 
-	Function SkipDQ(text AS BytePtr,txlen AS Long,offset AS Long) AS Long
+	Function SkipDQ(text As BytePtr,txlen As Long,offset As Long) As Long
 		'Print
-		Dim i AS Long
+		Dim i As Long
 		For i = offset To txlen
 			if text[i]=Asc(ex"\q") then ExitFor	
 		Next i
@@ -485,20 +485,20 @@ Public
 		ParseCommandLine(GetCommandLine())
 	EndSub
 
-	Function GetCount() AS Long
+	Function GetCount() As Long
 		GetCount=count
 	EndFunction
 
-	Function GetCmd(index AS DWord) AS BytePtr
+	Function GetCmd(index As DWord) As BytePtr
 		GetCmd=table[index]
 	EndFunction
 
-	Function GetCmdString(index AS DWord) AS String
+	Function GetCmdString(index As DWord) As String
 		GetCmdString=MakeStr(table[index])
 	EndFunction
 
 	'コマンドラインオプションチェック用
-	Function cmpCmd(index As DWord,cmptext AS BytePtr) AS Byte
+	Function cmpCmd(index As DWord,cmptext As BytePtr) As Byte
 		if lstrcmpi(table[index],cmptext)=0 Then
 			cmpCmd=TRUE
 		Else
@@ -506,17 +506,17 @@ Public
 		endif
 	Endfunction
 
-	Function ParseCommandLine(text AS BytePtr) AS Long
+	Function ParseCommandLine(text As BytePtr) As Long
 		if cmdStr<>0 Then Destroy()
 		'確保
-		Dim txlen AS Long
+		Dim txlen As Long
 		txlen=lstrlen(text)
 		cmdStr=calloc(txlen+2)
 		memcpy(cmdStr,text,txlen+1)
 
 		'スペースを数える
 		count=0
-		Dim i aS Long
+		Dim i As Long
 		For i = 0 To txlen
 			if cmdStr[i]=Asc(" ") Then 
 				count++
@@ -525,7 +525,7 @@ Public
 
 		'スペースの分だけテーブルを確保,構築
 		table=calloc(sizeof(BytePtr)*(count+1))
-		Dim it AS Long
+		Dim it As Long
 		table[0]=cmdStr
 		For i = 0 To txlen
 			'ダブルクォーテーション
@@ -558,8 +558,8 @@ End Class
 'ファイルパス用クラス
 Class FilePath
 Private
-	pathStr AS StringClass
-	pNull AS DWord
+	pathStr As StringClass
+	pNull As DWord
 Public
 	'ファイルかフォルダかはわからないけどパスがセットされた
 	Sub SetPath(path As BytePtr)
@@ -589,15 +589,15 @@ Public
 		'Base[i+1]=0
 	EndSub
 	
-	Sub cat(text as BytePtr)
+	Sub cat(text As BytePtr)
 		pathStr.cat(text)
 	EndSub
 
-	Function isExist() AS Long
+	Function isExist() As Long
 		isExist=PathFileExists(pathStr.ptr)
 	EndFunction
 
-	Function isDir() AS Long
+	Function isDir() As Long
 		if PathIsDirectory(pathStr.ptr) Then 
 			isDir=FALSE
 		Else
@@ -605,24 +605,24 @@ Public
 		Endif
 	EndFunction
 
-	Function GetPathString() AS String
+	Function GetPathString() As String
 		GetPathString=pathStr.getString()
 	EndFunction
 
-	Function GetPath() AS BytePtr
+	Function GetPath() As BytePtr
 		GetPath=pathStr.ptr
 	EndFunction
 
-	Function GetFileName() AS BytePtr
+	Function GetFileName() As BytePtr
 		GetFileName=PathFindFileName(pathStr.ptr)
 	EndFunction
 
-	Function GetFileExt() AS BytePtr
+	Function GetFileExt() As BytePtr
 		GetFileExt=PathFindExtension(pathStr.ptr)
 	EndFunction
 
-	Function GetFileDirString() AS String
-		Dim tmp AS BytePtr
+	Function GetFileDirString() As String
+		Dim tmp As BytePtr
 		pathStr.copyToNewPtr(tmp)
 		PathRemoveFileSpec(tmp)
 		GetFileDirString=MakeStr(tmp)
@@ -644,10 +644,10 @@ End Class
 Class File
 Private
 	hFile As HANDLE
-	path AS FilePath
+	path As FilePath
 Public
-	Function openFile(Path As BytePtr,_Mode AS DWORD) AS Long
-		Dim CreateMode AS Dword
+	Function openFile(Path As BytePtr,_Mode As DWORD) As Long
+		Dim CreateMode As Dword
 		If _Mode=GENERIC_READ then
 			CreateMode=OPEN_EXISTING
 		Elseif  _Mode=GENERIC_WRITE then
@@ -665,7 +665,7 @@ Public
 		Endif
 	EndFunction
 
-	Function read(dest AS BytePtr,size As DWord) AS Long
+	Function read(dest As BytePtr,size As DWord) As Long
 	     Dim dwAB As BytePtr
 	     read=ReadFile(hFile,dest,size,VarPtr(dwAB),ByVal NULL) As BytePtr
 	     If read=TRUE And dwAB=0 then
@@ -677,32 +677,32 @@ Public
 	     EndIf
 	End Function
 
-	Function write(source AS BytePtr,size As DWord) AS Long
+	Function write(source As BytePtr,size As DWord) As Long
 		WriteFile(hFile,source,size,VarPtr(write),ByVal NULL)
 	End Function
 
-	Function getFilePtr() AS DWord
+	Function getFilePtr() As DWord
 		nowFilePointer=SetFilePointer(hFile,0,0,FILE_CURRENT)
 	EndFunction
 
-	Sub setFilePtr(fp AS DWord)
+	Sub setFilePtr(fp As DWord)
 		SetFilePointer(hFile,fp,0,FILE_BEGIN)
 	End Sub
 
-	Sub addFilePtr(fp AS DWord)
+	Sub addFilePtr(fp As DWord)
 		SetFilePointer(hFile,fp,0,FILE_CURRENT)
 	End Sub
 
-	Function length() AS Long
+	Function length() As Long
 		if hFile = 0 Then length=-1 : Exitfunction
 		length=GetFileSize(hFile,NULL)
 	EndFunction
 
-	Function getHandle() AS HANDLE
+	Function getHandle() As HANDLE
 		getHandle=hFile
 	EndFunction
 
-	Function getPath() AS BytePtr
+	Function getPath() As BytePtr
 		getPath=path.GetPath()
 	EndFunction
 
@@ -719,12 +719,12 @@ Const STRCLASS_SPF_BUFFER = 1024
 Class StringClass
 Private
 	pNull As DWord
-	size AS DWord
+	size As DWord
 Public
-	ptr AS BytePtr
+	ptr As BytePtr
 
-	Function cat(text AS BytePtr) AS Long
-		Dim txlen AS DWord
+	Function cat(text As BytePtr) As Long
+		Dim txlen As DWord
 		txlen=lstrlen(text)
 		if pNull+txlen >= size Then allocStr(txlen+size)
 		memcpy(ptr+pNull,text,txlen)
@@ -732,8 +732,8 @@ Public
 		ptr[pNull]=0
 	EndFunction
 
-	Function cpy(text AS BytePtr) AS Long
-		Dim txlen AS DWord
+	Function cpy(text As BytePtr) As Long
+		Dim txlen As DWord
 		txlen=lstrlen(text)
 		if txlen > size Then allocStr(txlen)
 		memcpy(ptr,text,txlen)
@@ -741,25 +741,25 @@ Public
 		ptr[pNull]=0
 	EndFunction
 
-	Function length() AS DWord
+	Function length() As DWord
 		length=pNull
 	EndFunction
 
-	Function cmp(text AS BytePtr) AS Long
+	Function cmp(text As BytePtr) As Long
 		cmp=lstrcmp(ptr,text)
 	EndFunction
-	Function cmpi(text AS BytePtr) AS Long
+	Function cmpi(text As BytePtr) As Long
 		cmp=lstrcmp(ptr,text)
 	EndFunction
 
 	Function sprintf(lpFormat As BytePtr)(a As DWord ,b As DWord ,c As DWord ,d As DWord ,e As DWord ,f As DWord ,g As DWord ,h As DWord ,i As DWord ,j As DWord ,k As DWord ,l As DWord ,m As DWord ,n As DWord )
-		Dim txlen AS DWord
+		Dim txlen As DWord
 		txlen=lstrlen(lpFormat)
 		if txlen+STRCLASS_SPF_BUFFER+pNull > size then allocStr(txlen+STRCLASS_SPF_BUFFER+pNull)
 		pNull+=wsprintf(ptr+pNull,lpFormat,a,b,c,d,e,f,g,h,i,j,k,l,m,n)
 	EndFunction
 
-	Sub set(text AS BytePtr)
+	Sub set(text As BytePtr)
 		freeStr()
 		ptr=text
 		pNull=lstrlen(text)
@@ -783,7 +783,7 @@ Public
 
 	'あとはUnicode系とか、文字列検索とか必要になったら実装 
 
-	Sub allocStr(newSize AS DWord)
+	Sub allocStr(newSize As DWord)
 		size=newSize+5
 		if ptr=0 Then 
 			ptr=malloc(size)
@@ -803,7 +803,7 @@ Public
 		size=pNull+1
 	EndSub
 
-	Function getString() AS String
+	Function getString() As String
 		getString=MakeStr(ptr)
 	EndFunction
 
@@ -817,14 +817,14 @@ End Class
 '------------------------------------------------------
 '			たぶんもう使わない関数
 '------------------------------------------------------
-#include <EasyIO.sbp>
+'#include <EasyIO.sbp>
 
 
 '引数をNULLで区切る。NULL NULLで終わり (例）コマンド\0引数１\0"引数2"\0\0
-Function MakeCmdLine(Text As BytePtr) as BytePtr
-	Dim i AS DWORD,fDQ AS Byte,SP=-1 AS Long'-1でセット待ち
-	dim dbg AS Byte
-	dim  Buf As BytePtr,bi AS DWORD
+Function MakeCmdLine(Text As BytePtr) As BytePtr
+	Dim i As DWORD,fDQ As Byte,SP=-1 As Long'-1でセット待ち
+	dim dbg As Byte
+	dim  Buf As BytePtr,bi As DWORD
 	Const SPR=&H00'区切り文字NULL
 
 	If Text=0 then ExitFunction
@@ -872,7 +872,7 @@ Endfunction
 'この関数は指定した番号の引数をとってくる。
 'EX) Text=cmd1\0cmd2\0opt1\0"path"\0\0
 '2を指定すれば3つ目の「opt1」の開始アドレス0xAが返ってくる。MakeStr(Text+0xA)で「opt1」という文字列を取り出せる。
-Function GetCmdAdr(Text AS BytePtr,Num As Byte) AS DWORD
+Function GetCmdAdr(Text As BytePtr,Num As Byte) As DWORD
 	Dim i As DWORD,C As Byte
 	If Num=0 then GetCmdAdr=0:ExitFunction
 	Do
