@@ -13,10 +13,21 @@ pk pkh pfs archive extractor for TheLastStory.
 	  
 	> LSPK-Extractor.exe boot.pk  
 
+
+##pk-unpack.exeについて
+	pkファイルとpkhファイルを使いって展開を行います。  
+	pfsファイルがない場合に使ってください。  
+	拡張子がtxtで出力されていますが、中身はバイナリの場合があります。  
+
+
+##DSDecmp.exeが動作を停止する場合
+	/w オプションで実行間隔を調整して実行してください。  
+	例：LSPK-Extractor.exe boot.pk /w 100  
+
+
 ファイルフォーマットについては以下をご覧ください。  
 	http://forum.xentax.com/viewtopic.php?f=10&t=5938  
 	http://rgbacrt.seesaa.net/article/437742154.html  
-
 
 
 ActiveBasic ver4で書かれています。

@@ -23,7 +23,7 @@ Const MAX_THREAD_COUNT = 100
 Const WAIT_ASYNC_DECODE_LV2 = 1000
 
 Sub Main()
-	Print ex"The Last Story .pk .pkh .pfs Extracter              Programmed by RGBA_CRT 2016\n"
+	Print ex"The Last Story .pk .pkh .pfs Extracter v0.1         Programmed by RGBA_CRT 2016\n"
 
 	'DSDecmp.exeのファイルパスを取得して、存在を確認
 	MakeDSDPath()
