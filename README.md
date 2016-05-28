@@ -31,7 +31,5 @@ pk pkh pfs archive extractor for TheLastStory.
 
 
 ActiveBasic ver4で書かれています。
-RGBALib(https://github.com/RGBA-CRT/RGBALib)を使用しているので、
+RGBALib[<https://github.com/RGBA-CRT/RGBALib>]を使用しているので、  
 コンパイルする場合はこちらも落としてください。
-。
-
