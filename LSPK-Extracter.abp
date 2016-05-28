@@ -1,5 +1,5 @@
 'TheLastStory pk pkh pfs Extractor	Programmed by RGBA_CRT 2016. Lang = ActiveBasic v4
-#include"RGBALib.sbp"
+#include<RGBALib.sbp>
 #console
 
 Dim CS_ThreadCount As CRITICAL_SECTION,ThreadCount As DWord
