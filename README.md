@@ -1,11 +1,10 @@
-# LSPK-Extracter
+#LSPK-Extracter
 pk pkh pfs archive extractor for TheLastStory(Wii).
 
-##Download
-	[https://github.com/RGBA-CRT/LSPK-Extracter/releases]
-    
+##[Download](https://github.com/RGBA-CRT/LSPK-Extracter/releases)
 
-## usage
+
+##usage
 	1.Download LSPK-Extractor.zip and unzip to target dir.
 	2.D&D .pk files to LSPK-Extractor.exe 
 	3.Wait for extraction.
@@ -33,11 +32,11 @@ pk pkh pfs archive extractor for TheLastStory(Wii).
 
 
 ##File format infomation
-	ファイルフォーマットについては以下をご覧ください。  
-	http://forum.xentax.com/viewtopic.php?f=10&t=5938  
-	http://rgbacrt.seesaa.net/article/437742154.html  
+ファイルフォーマットについては以下をご覧ください。  
+ + http://forum.xentax.com/viewtopic.php?f=10&t=5938  
+ + http://rgbacrt.seesaa.net/article/437742154.html  
 
 
 ActiveBasic ver4で書かれています。
-RGBALib[<https://github.com/RGBA-CRT/RGBALib>]を使用しているので、  
+[RGBALib](https://github.com/RGBA-CRT/RGBALib)を使用しているので、  
 コンパイルする場合はこちらも落としてください。
