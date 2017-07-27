@@ -36,8 +36,8 @@ pk pkh pfs archive extractor for TheLastStory(Wii).
  + http://forum.xentax.com/viewtopic.php?f=10&t=5938  
  + http://rgbacrt.seesaa.net/article/437742154.html  
 
-
+## build
  + [ActiveBasic ver4](https://www.activebasic.com/)で書かれています。
  + RGBALib[<https://github.com/RGBA-CRT/RGBALib>]を使用しているので、コンパイルする場合はこちらも落としてください。
  + This program is compiled by [ActiveBasic ver4](https://www.activebasic.com/)
- + And using [This](https://github.com/RGBA-CRT/RGBALib) lib.
+ + And using [this](https://github.com/RGBA-CRT/RGBALib) lib.
