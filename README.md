@@ -30,6 +30,6 @@ pk pkh pfs archive extractor for TheLastStory.
 	http://rgbacrt.seesaa.net/article/437742154.html  
 
 
-ActiveBasic ver4で書かれています。
+[ActiveBasic ver4](https://www.activebasic.com/)で書かれています。
 RGBALib[<https://github.com/RGBA-CRT/RGBALib>]を使用しているので、  
 コンパイルする場合はこちらも落としてください。

@@ -2,35 +2,46 @@
 #include<RGBALib.sbp>
 #console
 
-Dim CS_ThreadCount As CRITICAL_SECTION,ThreadCount As DWord
-InitializeCriticalSection(CS_ThreadCount)
-Main()
-#ifdef _DEBUG
-	Sleep(-1)
-#else
-	End
-#endif
-
 Dim BaseDir As BytePtr
 Dim CurrentPath As BytePtr
 Dim DSDPath As BytePtr
 Dim hPack As HANDLE
-Dim noDecomp = FALSE As Byte
-Dim noExtract = FALSE As Byte
+Dim noDecomp = FALSE As BOOL
+Dim noExtract = FALSE As BOOL
+Dim ReducedOut AS BOOL
 Dim WAIT_ASYNC_DECODE = 50 AS Long
 Const DECODER_EXE_NAME = "DSDecmp.exe"
 Const MAX_THREAD_COUNT = 100
 Const WAIT_ASYNC_DECODE_LV2 = 1000
 
+Dim CS_ThreadCount As CRITICAL_SECTION,ThreadCount As DWord
+InitializeCriticalSection(CS_ThreadCount)
+
+#ifdef _DEBUG
+	noDecomp = TRUE
+	ReducedOut=TRUE
+#endif
+Main()
+#ifdef _DEBUG
+	Print "program end"
+	Sleep(-1)
+#else
+	Print "Program End."
+	End
+#endif
+
 Sub Main()
-	Print ex"The Last Story .pk .pkh .pfs Extracter v0.1         Programmed by RGBA_CRT 2016\n"
+	Print ex"The Last Story .pk .pkh .pfs Extracter v0.2         Programmed by RGBA_CRT 2016-2017\n"
 
 	'DSDecmp.exeのファイルパスを取得して、存在を確認
 	MakeDSDPath()
 	if IsFilePath(DSDPath) = FALSE Then 
-		Dim yn AS String
-		Input ex"DSDecmp.exe is not exist. Would you want to continue? (Y/N) \n> ",yn
-		if yn[0]<>Asc("y") and yn[0]<>Asc("Y") Then end
+		'Dim yn AS String
+		'Input ex"DSDecmp.exe is not exist. Would you want to continue? (Y/N) \n> ",yn
+		'if yn[0]<>Asc("y") and yn[0]<>Asc("Y") Then end
+		SetConsoleColor(&H06)
+		Print "[WARNING]DSDecmp.exe is not exist."
+		SetConsoleColor(CC_DEFAULT)
 	endif
 
 	'コマンドラインから処理すべきファイル名を取得
@@ -63,7 +74,7 @@ Sub Main()
 	if pfs.LoadPfsFile(MakeStr(dPath)+".pfs") <> 0 Then	printf("File open error : %s.pfs",dPath):ExitSub
 	if pkh.GetFileCount() <> pfs.GetAllFileCount() Then printf("File count not match."):ExitSub
 	hPack=OpenFile(MakeStr(dPath)+".pk",GENERIC_READ)
-	if hPack = -1 Then printf("File open error : %s.pk",dPath):ExitSub
+	if hPack = -1 And noExtract=FALSE Then printf("File open error : %s.pk",dPath):ExitSub
 
 /*	For i= lstrlen(dPath) To 0 Step -1
 		if dPath[i]=Asc("\") Then ExitFor
@@ -82,7 +93,6 @@ Sub Main()
 	'展開開始
 	Dim ret As Long
 	ret=SloveDir(VarPtr(pfs),VarPtr(pkh),0,1)
-	
 	free(DSDPath)
 	if noExtract=TRUE Then ExitSub
 	
@@ -119,6 +129,9 @@ Function procCmdLine() as String
 		Elseif cmd.cmpCmd(i,"/e") then
 			Print "Extract only Mode."
 			noDecomp=TRUE
+		Elseif cmd.cmpCmd(i,"/s1") then
+			Print "Reduced output mode"			
+			ReducedOut=TRUE
 		Elseif cmd.cmpCmd(i,"/w") then
 			i++
 			WAIT_ASYNC_DECODE=Val(cmd.GetCmd(i))
@@ -133,7 +146,7 @@ Function procCmdLine() as String
 EndFunction
 
 Sub PrintUsage()
-	printf(ex"Usage : LSPK-Extract [/v][/e][/w num] pkfile\n\t/v - View directory/file tree.\n\t/e - extract only (do not decompless)\n\t/w - set wait for "+DECODER_EXE_NAME+ex"(ms)\n")
+	printf(ex"Usage : LSPK-Extract [/v][/e][/w num] pkfile\n\t/s1 - Reduce display amount.\n\t/v - View directory/file tree.\n\t/e - extract only (do not decompless)\n\t/w - set wait for "+DECODER_EXE_NAME+ex"(ms)\n")
 EndSub
 
 Sub MakeDSDPath()
@@ -159,12 +172,13 @@ Function SloveDir(pfs As *PFS_READER,pkh As *PFS_READER,DirID As DWord,HC As Lon
 
 	if HC <= 1 Then printf(ex"\nTargetDir : %s\n DirCount : %d\n (Root)\\ \n",BaseDir,cur->child_dir_count)
 
-	Dim i As Long
+	Dim i As DWord
 	For i = cur->start_child_dir To cur->start_child_dir+cur->child_dir_count-1
 		child=pfs->GetDirInfo(i)
 		if child->parentID=DirID Then
 			'表示
-			printf(ex"%s[%d,%d,%d,%d]%s\\\n",String$((HC+1)*2," "),child->parentID,i,child->start_child_file,child->child_file_count,pfs->GetStr(i))
+			printIndent(HC+1)
+			printf(ex"[%d,%d,%d,%d]%s\\\n",child->parentID,i,child->start_child_file,child->child_file_count,pfs->GetStr(i))
 
 			'子ディレクトリをカレントディレクトリに追加（進める）
 			PushDir(CurrentPath,pfs->GetStr(i))	
@@ -180,11 +194,19 @@ Function SloveDir(pfs As *PFS_READER,pkh As *PFS_READER,DirID As DWord,HC As Lon
 			
 			'子ディレクトリをカレントディレクトリから削除
 			PopDir(CurrentPath)						
-		Else
-			Print String$((HC+1)*2," ")+"<<<<<<<<<<<< BUG or ERROR >>>>>>>>>>>>>>"
+		Else			
+			printIndent(HC+1)
+			Print "<<<<<<<<<<<< BUG or ERROR >>>>>>>>>>>>>>"
 		Endif
 	Next i
 EndFunction
+
+Sub printIndent(deps AS Long)
+	Dim i AS Long
+	For i= 0 To deps*2
+		PrintPtr(" ",1)
+	Next i
+End Sub
 
 'パス+ファイル名のCRC32がPKHのHashに当たる
 '※PFSに記録されているパスの情報をもとにCRC32をとるときは、パスに含まれるすべての大文字を小文字に変換しないと、CRCが合わない！
@@ -194,22 +216,26 @@ Function ListUpFiles(pfs As *PFS_READER,pkh As *PKH_READER,DirID As DWord,HC As 
 	cur=pfs->GetDirInfo(DirID)
 	if cur->child_file_count=0 Then ExitSub
 
-	Dim i As Long
-	For i = cur->start_child_file To cur->start_child_file+cur->child_file_count-1
+	Dim i As DWord
+	For i = cur->start_child_file To cur->start_child_file+(cur->child_file_count-1)
 		'パスを作成(すべて小文字に変換する)
 		wsprintf(pathBuf,"%s%s",CurrentPath,pfs->GetFileStr(i))
 
 		'ファイルパスからハッシュを作成、PKHテーブルを検索、PKHテーブルのインデックスを取得
 		index=pkh->GetTableIndexFromHash(crc32ls(pathBuf))
 		if index = -1 Then
-			printf(ex"%sFile not found  -> [File,%d,%08X] %s\n",String$((HC+1)*2," "),i,crc32str(pathBuf),pathBuf)
+			printIndent(HC+1)
+			printf(ex"File not found  -> [File,%d,%08X] %s\n",i,crc32str(pathBuf),pathBuf)
 			ListUpFiles++
 			Continue
 		endif
 
 		'インデックスからファイルデータを取得、展開
 		phk_struct=pkh->GetPKH_Table(index)
-		printf(ex"%s[File,%03d,%08X,%03dKB]%s\n",String$((HC+1)*2," "),i,phk_struct->hash,(phk_struct->dec_size/1000) As Long,pfs->GetFileStr(i))
+		if ReducedOut=FALSE or (i Mod 100 = 0) Then
+			printIndent(HC+1)			
+			printf(ex"[File,%03d,%08X,%03dKB]%s\n",i,phk_struct->hash,(phk_struct->dec_size/1000) As Long,pfs->GetFileStr(i))
+		Endif
 
 		'保存用パスの作成
 		wsprintf(pathBuf,"%s%s",BaseDir,pfs->GetFileStr(i))
@@ -254,9 +280,10 @@ Sub OutputPK(Address As DWord,CmpSize As DWord,FileName As BytePtr,notDec As Byt
 
 	Dim hOut As HANDLE
 	hOut=OpenFile(FileName,GENERIC_WRITE)
-	if hOut=-1 Then printf("File output error : %s",FileName):debug
+	if hOut=-1 Then printf(ex"File output error : %s\n",FileName):debug:exitSub 
 	OutFile(hOut,pkBuf,CmpSize)
 	CloseHandle(hOut)
+	free(pkBuf) : pkBuf=NULL
 
 	if CmpSize=0 Then ExitSub
 
