@@ -5,14 +5,17 @@
 Dim BaseDir As BytePtr
 Dim CurrentPath As BytePtr
 Dim DSDPath As BytePtr
+Dim PigZPath As BytePtr 'a1batross: Added for Fate/Extella
 Dim hPack As HANDLE
 Dim noDecomp = FALSE As BOOL
 Dim noExtract = FALSE As BOOL
 Dim ReducedOut AS BOOL
+Dim ZLibDecomp = FALSE As BOOL 'a1batross: Added for Fate/Extella
 Dim WAIT_ASYNC_DECODE = 50 AS Long
 Const DECODER_EXE_NAME = "DSDecmp.exe"
 Const MAX_THREAD_COUNT = 100
 Const WAIT_ASYNC_DECODE_LV2 = 1000
+Const PIGZ_EXE_NAME = "pigz.exe" 'a1batross: Added for Fate/Extella
 
 Dim CS_ThreadCount As CRITICAL_SECTION,ThreadCount As DWord
 InitializeCriticalSection(CS_ThreadCount)
@@ -50,6 +53,15 @@ Sub Main()
 #ifdef _DEBUG
 	Input ex"D&D .pk file\n>",path :	dPath=DelDQ(path)
 #endif
+	'a1batross: Added for Fate/Extella
+	if ZLibDecomp=TRUE Then
+		MakePigZPath()
+		if IsFilePath(PigZPath)=FALSE Then
+			Print "[ERROR] Can't zlib decompress without pigz.exe!"
+			ExitSub
+		Endif
+	Endif
+
 	if IsFilePath(path)=FALSE Then
 		PrintUsage()
 		ExitSub
@@ -132,6 +144,9 @@ Function procCmdLine() as String
 		Elseif cmd.cmpCmd(i,"/s1") then
 			Print "Reduced output mode"			
 			ReducedOut=TRUE
+		Elseif cmd.cmdCmd(i, "/z") then 'a1batross: Added for Fate/Extella
+			Print "ZLib decompressing mode(Fate/Extella)"
+			ZLibDecomp=TRUE
 		Elseif cmd.cmpCmd(i,"/w") then
 			i++
 			WAIT_ASYNC_DECODE=Val(cmd.GetCmd(i))
@@ -146,7 +161,7 @@ Function procCmdLine() as String
 EndFunction
 
 Sub PrintUsage()
-	printf(ex"Usage : LSPK-Extract [/v][/e][/w num] pkfile\n\t/s1 - Reduce display amount.\n\t/v - View directory/file tree.\n\t/e - extract only (do not decompless)\n\t/w - set wait for "+DECODER_EXE_NAME+ex"(ms)\n")
+	printf(ex"Usage : LSPK-Extract [/v][/e][/w num] pkfile\n\t/s1 - Reduce display amount.\n\t/v - View directory/file tree.\n\t/z - use zlib decompression(Fate/Extella)\n\t/e - extract only (do not decompless)\n\t/w - set wait for "+DECODER_EXE_NAME+ex"(ms)\n")
 EndSub
 
 Sub MakeDSDPath()
@@ -161,6 +176,21 @@ Sub MakeDSDPath()
 
 	DSDPath=calloc(i+lstrlen(DECODER_EXE_NAME)+1+10)
 	wsprintf(DSDPath,"%s%s",Path,DECODER_EXE_NAME)
+EndSub
+
+'a1batross: Added for Fate/Extella
+Sub MakePigZPath()
+	Dim Path[MAX_PATH] As Byte,i As Long
+
+	'自己のファイルパスを取得
+	GetModuleFileName(NULL,Path,MAX_PATH)
+	For i = lstrlen(Path) To 0 Step -1
+		If Path[i]=&H5C then ExitFor' \ だったら
+	Next i
+	Path[i+1]=0'￥以下を潰す
+
+	PigZPath=calloc(i+lstrlen(PIGZ_EXE_NAME)+1+10)
+	wsprintf(PigZPath,"%s%s",Path,PIGZ_EXE_NAME)
 EndSub
 
 'SloveDir
@@ -288,17 +318,24 @@ Sub OutputPK(Address As DWord,CmpSize As DWord,FileName As BytePtr,notDec As Byt
 	if CmpSize=0 Then ExitSub
 
 	if notDec<>TRUE Then
-		Dim cmdLine[MAX_PATH] As Byte
-		wsprintf(cmdLine,"%s %s",DSDPath,FileName)
-		SirentExecAsync(cmdLine)
+		'Dim cmdLine[MAX_PATH] As Byte
+		'wsprintf(cmdLine,"%s %s",DSDPath,FileName)
+		'SirentExecAsync(cmdLine)
+
+		SirentExecAsync(FileName)
 	Endif
 EndSub
 
-Function SirentExec(ProgramName As BytePtr) As BytePtr
+Function SirentExec(FileName As BytePtr) As BytePtr
 	Dim read As HANDLE
 	Dim write As HANDLE
 	dim StartInfo As STARTUPINFO
 	Dim ProInfo As PROCESS_INFORMATION
+	Dim DSDecompCmdLine[MAX_PATH] As Byte
+	Dim PigZCmdLine[MAX_PATH] As Byte
+	Dim FileNameGZ[MAX_PATH] As Byte
+
+	wsprintf(DSDecompCmdLine, "%s %s", DSDPath, FileName)
 
 	FillMemory(VarPtr(StartInfo),sizeof(STARTUPINFO),0)
 	StartInfo.cb			=	sizeof(STARTUPINFO)
@@ -312,10 +349,22 @@ Function SirentExec(ProgramName As BytePtr) As BytePtr
 	ThreadCounterInc()
 
 	'実行
-	CreateProcess(NULL, ProgramName,ByVal NULL,ByVal NULL, TRUE, CREATE_NO_WINDOW, NULL,NULL, StartInfo, ProInfo )
+	CreateProcess(NULL, DSDecompCmdLine,ByVal NULL,ByVal NULL, TRUE, CREATE_NO_WINDOW, NULL,NULL, StartInfo, ProInfo )
 
 	'DSD終了待ち
 	WaitForSingleObject( ProInfo.hProcess, 3600000 )
+
+	'a1batross: ZLib Decompression stage
+	if ZLibDecomp=TRUE Then
+		wsprintf(FileNameGZ, "%s.gz", FileName)
+		wspritnf(PigZCmdLine, "%s -d -z -- %s", PigZPath, FileNameGZ) 
+
+		MoveFile(FileName, FileNameGZ)
+
+		CreateProcess(NULL, PigZCmdLine, ByVal NULL,ByVal NULL, TRUE, CREATE_NO_WINDOW, NULL,NULL, StartInfo, ProInfo )
+
+		WaitForSingleObject( ProInfo.hProcess, 3600000 )
+	Endif
 
 	CloseHandle( ProInfo.hThread )
 	CloseHandle( ProInfo.hProcess )
@@ -328,11 +377,11 @@ Function SirentExec(ProgramName As BytePtr) As BytePtr
 Endfunction
 
 '別スレッドで実行。全部終了したか確認するためにスレッドカウンタを用意。
-Sub SirentExecAsync(ProgramName As BytePtr) 
+Sub SirentExecAsync(FileName As BytePtr) 
 	WaitForThreadOver()
 
 	Dim dwTH As HANDLE
-	CreateThread(ByVal NULL,0,AddressOf(SirentExec),ProgramName,0,VarPtr(dwTH))
+	CreateThread(ByVal NULL,0,AddressOf(SirentExec),FileName,0,VarPtr(dwTH))
 	Sleep(WAIT_ASYNC_DECODE) '負荷低減
 End Sub
 
