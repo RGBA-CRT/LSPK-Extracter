@@ -10,28 +10,36 @@ Dim noDecomp = FALSE As BOOL
 Dim noExtract = FALSE As BOOL
 Dim ReducedOut AS BOOL
 Dim WAIT_ASYNC_DECODE = 50 AS Long
-Const DECODER_EXE_NAME = "DSDecmp.exe"
+Dim DECODER_EXE_NAME=NULL AS BytePtr
 Const MAX_THREAD_COUNT = 100
 Const WAIT_ASYNC_DECODE_LV2 = 1000
+Const DSD_EXE_NAME= "DSDecmp.exe"
 
 Dim CS_ThreadCount As CRITICAL_SECTION,ThreadCount As DWord
 InitializeCriticalSection(CS_ThreadCount)
 
 #ifdef _DEBUG
-	noDecomp = TRUE
+'	noDecomp = TRUE
 	ReducedOut=TRUE
 #endif
+
+setDecmpExeName(DSD_EXE_NAME)
+
 Main()
 #ifdef _DEBUG
 	Print "program end"
 	Sleep(-1)
 #else
 	Print "Program End."
-	End
+	ExitProcess(10)
 #endif
 
 Sub Main()
-	Print ex"The Last Story .pk .pkh .pfs Extracter v0.2         Programmed by RGBA_CRT 2016-2017\n"
+	Print ex"The Last Story .pk .pkh .pfs Extracter v0.2.1         Programmed by RGBA_CRT 2016-2017\n"
+
+	'コマンドラインから処理すべきファイル名を取得
+	Dim path As String , dPath As BytePtr
+	path=procCmdLine()
 
 	'DSDecmp.exeのファイルパスを取得して、存在を確認
 	MakeDSDPath()
@@ -40,13 +48,11 @@ Sub Main()
 		'Input ex"DSDecmp.exe is not exist. Would you want to continue? (Y/N) \n> ",yn
 		'if yn[0]<>Asc("y") and yn[0]<>Asc("Y") Then end
 		SetConsoleColor(&H06)
-		Print "[WARNING]DSDecmp.exe is not exist."
+		printf(ex"[WARNING]%s is not exist.\n",DECODER_EXE_NAME)
 		SetConsoleColor(CC_DEFAULT)
 	endif
+	printf(DSDPath)
 
-	'コマンドラインから処理すべきファイル名を取得
-	Dim path As String , dPath As BytePtr
-	path=procCmdLine()
 #ifdef _DEBUG
 	Input ex"D&D .pk file\n>",path :	dPath=DelDQ(path)
 #endif
@@ -126,27 +132,43 @@ Function procCmdLine() as String
 		if cmd.cmpCmd(i,"/v") then
 			Print "PFS Viewer Mode."
 			noExtract=TRUE
+
 		Elseif cmd.cmpCmd(i,"/e") then
 			Print "Extract only Mode."
 			noDecomp=TRUE
+
 		Elseif cmd.cmpCmd(i,"/s1") then
 			Print "Reduced output mode"			
 			ReducedOut=TRUE
+
+		Elseif cmd.cmpCmd(i,"/dec") then
+			i++
+			setDecmpExeName(cmd.GetCmd(i))
+			printf(ex"change decompresser : %s\n",DECODER_EXE_NAME)
+
 		Elseif cmd.cmpCmd(i,"/w") then
 			i++
 			WAIT_ASYNC_DECODE=Val(cmd.GetCmd(i))
 			if WAIT_ASYNC_DECODE=<0 then WAIT_ASYNC_DECODE=50
 			Print "wait =";WAIT_ASYNC_DECODE
+
 		Else
 			if IsFilePath(cmd.GetCmd(i))=TRUE Then
 				procCmdLine=cmd.GetCmdString(i)
 			endif
+
 		endif
 	Next i
 EndFunction
 
+Sub setDecmpExeName(newName AS BytePtr)
+	if DECODER_EXE_NAME<>NULL Then free(DECODER_EXE_NAME)
+	DECODER_EXE_NAME=calloc(newName+5)
+	lstrcpy(DECODER_EXE_NAME,newName)
+End Sub
+
 Sub PrintUsage()
-	printf(ex"Usage : LSPK-Extract [/v][/e][/w num] pkfile\n\t/s1 - Reduce display amount.\n\t/v - View directory/file tree.\n\t/e - extract only (do not decompless)\n\t/w - set wait for "+DECODER_EXE_NAME+ex"(ms)\n")
+	printf(ex"Usage : LSPK-Extract [/s1][/v][/e][/w num][/dec exename] pkfile\n\t/s1 - Reduce display amount.\n\t/v - View directory/file tree.\n\t/e - extract only (do not decompless)\n\t/w - set wait time for decoder(ms)\n\t/dec - chenge decompresser.\n")
 EndSub
 
 Sub MakeDSDPath()
@@ -289,13 +311,15 @@ Sub OutputPK(Address As DWord,CmpSize As DWord,FileName As BytePtr,notDec As Byt
 
 	if notDec<>TRUE Then
 		Dim cmdLine[MAX_PATH] As Byte
-		wsprintf(cmdLine,"%s %s",DSDPath,FileName)
-		SirentExecAsync(cmdLine)
+		wsprintf(cmdLine,ex"/c \q%s %s\q",DSDPath,FileName)
+		'printf(ex"[bat]%s\n\n",cmdLine)
+		'SirentExecAsync(cmdLine)
+		SirentExec(cmdLine)
 	Endif
 EndSub
 
 Function SirentExec(ProgramName As BytePtr) As BytePtr
-	Dim read As HANDLE
+/*	Dim read As HANDLE
 	Dim write As HANDLE
 	dim StartInfo As STARTUPINFO
 	Dim ProInfo As PROCESS_INFORMATION
@@ -303,25 +327,29 @@ Function SirentExec(ProgramName As BytePtr) As BytePtr
 	FillMemory(VarPtr(StartInfo),sizeof(STARTUPINFO),0)
 	StartInfo.cb			=	sizeof(STARTUPINFO)
 	StartInfo.dwFlags		=	STARTF_USESTDHANDLES
-	StartInfo.wShowWindow	= 	SW_HIDE
+	StartInfo.wShowWindow	= 	0'SW_HIDE
 	StartInfo.hStdOutput	=	write
 	StartInfo.hStdError		=	write
 '	StartInfo.hStdInput		=	read
 
-	'スレッド数をインクリメント
+	'スレッド数をインクリメント*/
 	ThreadCounterInc()
 
 	'実行
-	CreateProcess(NULL, ProgramName,ByVal NULL,ByVal NULL, TRUE, CREATE_NO_WINDOW, NULL,NULL, StartInfo, ProInfo )
+	'CreateProcess(NULL, ProgramName,ByVal NULL,ByVal NULL, FALSE, CREATE_NO_WINDOW, NULL,NULL, StartInfo, ProInfo )
+	'CreateProcess(NULL, ProgramName,ByVal NULL,ByVal NULL, TRUE, NORMAL_PRIORITY_CLASS, NULL,NULL, StartInfo, ProInfo )
+	'Print GetLastError()
+	ShellExecute(NULL, "open", "cmd.exe", ProgramName, "", SW_HIDE)
+	'Print GetLastError()
 
 	'DSD終了待ち
-	WaitForSingleObject( ProInfo.hProcess, 3600000 )
+'	WaitForSingleObject( ProInfo.hProcess, 3600000 )
 
-	CloseHandle( ProInfo.hThread )
+/*	CloseHandle( ProInfo.hThread )
 	CloseHandle( ProInfo.hProcess )
 
 	CloseHandle( read )
-	CloseHandle( write )
+	CloseHandle( write )*/
 
 	'スレッド数をデクリメント
 	ThreadCounterDec()
