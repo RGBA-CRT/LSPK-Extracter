@@ -12,7 +12,13 @@ EndType
 Print "Last Story .pkh test programm   programmed by RGBA_CRT 2016"
 
 Dim pkh As PKH_READER
-pkh.LoadPkhFile("boot.pkh")
+Dim cmd AS CommandLine
+if pkh.LoadPkhFile(cmd.GetCmd(1))=0 Then 
+	Print "Load ok"
+Else
+	printf("%s open err")
+	End
+Endif
 
 Dim i AS Long,cur AS *PKH_FILE_DATA
 For i = 0 To pkh.GetFileCount()-1

@@ -24,7 +24,6 @@ InitializeCriticalSection(CS_ThreadCount)
 #endif
 
 setDecmpExeName(DSD_EXE_NAME)
-
 Main()
 #ifdef _DEBUG
 	Print "program end"
@@ -200,7 +199,7 @@ Function SloveDir(pfs As *PFS_READER,pkh As *PFS_READER,DirID As DWord,HC As Lon
 		if child->parentID=DirID Then
 			'表示
 			printIndent(HC+1)
-			printf(ex"[%d,%d,%d,%d]%s\\\n",child->parentID,i,child->start_child_file,child->child_file_count,pfs->GetStr(i))
+			printf(ex"[%d,%d,%d,%d,%x]%s\\\n",child->parentID,i,child->start_child_file,child->child_file_count,pfs->GetStr(i))
 
 			'子ディレクトリをカレントディレクトリに追加（進める）
 			PushDir(CurrentPath,pfs->GetStr(i))	
@@ -254,9 +253,18 @@ Function ListUpFiles(pfs As *PFS_READER,pkh As *PKH_READER,DirID As DWord,HC As 
 
 		'インデックスからファイルデータを取得、展開
 		phk_struct=pkh->GetPKH_Table(index)
+
+		Dim cmp_txt AS BytePtr
+		if phk_struct->com_size = 0 Then
+			cmp_txt="raw"
+		Else
+			cmp_txt="cmp"
+		Endif
+
 		if ReducedOut=FALSE or (i Mod 100 = 0) Then
 			printIndent(HC+1)			
-			printf(ex"[File,%03d,%08X,%03dKB]%s\n",i,phk_struct->hash,(phk_struct->dec_size/1000) As Long,pfs->GetFileStr(i))
+			printf(ex"[File,%03d,0x%08X,%08X,%4dKB,%s]%s\n",i,phk_struct->offset,phk_struct->hash,(phk_struct->dec_size/1000) As Long,cmp_txt,pfs->GetFileStr(i))
+			'printf(ex"[File,%03d,%08X,%03dKB]%s\n",i,phk_struct->hash,(phk_struct->dec_size/1000) As Long,pfs->GetFileStr(i))
 		Endif
 
 		'保存用パスの作成

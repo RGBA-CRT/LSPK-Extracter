@@ -14,24 +14,34 @@ EndType
 Print "Last Story .pfs test programm   programmed by RGBA_CRT 2016"
 
 Dim pfs AS PFS_READER
-if pfs.LoadPfs("boot.pfs")=0 Then Print "Load ok"
+Dim cmd AS CommandLine
+
+if pfs.LoadPfs(cmd.GetCmd(1))=0 Then 
+	Print "Load ok"
+Else
+	printf("%s open err")
+	End
+Endif
 
 Print pfs.GetAllDirCount();"dirs exist"
 Print pfs.GetAllFileCount();"files exist"
 
+Print "Dir Table : "
 Dim i as Long,txtBuf[1024] AS Byte
 For i =0 To pfs.GetAllDirCount()-1
 	PrintDirInfo(i)
 Next i
 
+Print "String Table : "
 For i=0 To pfs.GetAllFileCount()+pfs.GetAllDirCount()-1
 	wsprintf(txtBuf,ex"\n[%03d] 0x%08X = %s",i,pfs.GetStrOffset(i),pfs.GetStr(i))
 	Print MakeStr(txtBuf);
 Next i
 
 Print 
+Print "File Tree : "
 SloveDir(0,1)
-Sleep(-1)
+'Sleep(-1)
 End
 
 
@@ -63,7 +73,9 @@ Sub ListUpFiles(DirID AS DWord,HC aS Long )
 	Dim i AS Long
 	For i = cur->start_child_file To cur->start_child_file+cur->child_file_count-1
 		child=pfs.GetDirInfo(i)
-		printf(ex"%s[File,%d]%s\n",String$((HC+1)*2," "),i,pfs.GetFileStr(i))
+		
+		printIndent(HC+1)
+		printf(ex"[File,%d]%s\n",i,pfs.GetFileStr(i))
 	Next i
 EndSub
 
@@ -75,7 +87,12 @@ Sub PrintDirInfo(ID AS DWord)
 	Print MakeStr(txtBuf);
 EndSub
 
-
+Sub printIndent(deps AS Long)
+	Dim i AS Long
+	For i= 0 To deps*2
+		PrintPtr(" ",1)
+	Next i
+End Sub
 
  
 
