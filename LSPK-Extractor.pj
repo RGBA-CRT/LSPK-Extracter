@@ -1,0 +1,23 @@
+' ActiveBasic Project file.
+
+#VERSION=9
+
+#MODULETYPE=0
+
+#NAME=LSPK-Extractor
+
+#PLATFORM=32
+
+#USEWINDOW=0
+
+#OPTION=&H00010000
+
+#OUTPUT_RELEASE=.\LSPK-Extractor.exe
+
+#OUTPUT_DEBUG=.\LSPK-Extractor_debug.exe
+
+#RESOURCE=0
+
+#SOURCE
+LSPK-Extractor.abp
+LSPK-lib.sbp

@@ -1,0 +1,250 @@
+'TheLastStory pk pkh pfs Extractor	Programmed by RGBA_CRT 2016. Lang = ActiveBasic v4
+#include<RGBALib.sbp>
+#include "LSPK-lib.sbp"
+#console
+Const DEFAULT_DECOMPRESSER = "DSDecmp.exe"
+Dim decPath As BytePtr
+
+Print ex"The Last Story .pk .pkh .pfs Extracter v1.0         Programmed by RGBA_CRT 2016-2017\n"
+
+'デフォルトでDSD
+setDecompExeName(DEFAULT_DECOMPRESSER)
+Main()
+End
+
+
+Sub Main()
+	Dim noDecomp As BOOL
+	Dim viewMode As BOOL
+	Dim silent AS BOOL
+	Dim target AS String
+	Dim deompExe AS BytePtr
+	Dim cmd AS CommandLine
+	Dim i aS Long
+
+#IFDEF _DEBUG
+	cmd.ParseCommandLine("lp old\archive.pk /e ")
+#ENDIF
+
+	For i = 1 To cmd.GetCount()
+		if cmd.cmpCmd(i,"/v") then
+			Print "PFS Viewer Mode."
+			viewMode=TRUE
+
+		Elseif cmd.cmpCmd(i,"/e") then
+			Print "Extract only Mode."
+			noDecomp=TRUE
+
+		Elseif cmd.cmpCmd(i,"/s1") then
+			Print "Silent mode"			
+			silent=TRUE
+
+		Elseif cmd.cmpCmd(i,"/dec") then
+			i++
+			setDecompExeName(cmd.GetCmd(i))
+			if IsFilePath(decPath)=FALSE Then
+				'noDecomp=TRUE
+				printf(ex"decompresser not found : %s\n",decPath)
+				End
+			Else
+				printf(ex"decompresser : %s\n",decPath)
+			End If
+
+		Else
+			if IsFilePath(cmd.GetCmd(i))=TRUE Then
+				target=cmd.GetCmdString(i)
+			endif
+		endif
+	Next i
+
+	if target="" Then PrintUsage():End
+
+	printf(ex"Load:%s\n\n",target)
+	if viewMode Then
+		viewArchive(target)
+	Else
+		extractArchive(target,noDecomp,silent)
+	End If
+
+End Sub
+
+Sub PrintUsage()
+	printf(ex"Usage : PrintUsaget [/s1][/v][/e][/dec exename] pkfile\n\t/s1 - Reduce display amount.\n\t/v - View directory/file tree.\n\t/e - extract only (do not decompless)\n\t/dec - chenge decompresser.\n")
+EndSub
+
+Sub setDecompExeName(exename As BytePtr)
+	if decPath<>NULL Then free(decPath)
+	Dim bp As BinalyDirectory
+	Dim tmp AS BytePtr
+	tmp=bp.MakePath(exename)
+	decPath=calloc(lstrlen(tmp)+1)
+	lstrcpy(decPath,tmp)
+End Sub
+
+Sub viewArchive(target AS BytePtr)
+	Dim lspk As LSPK_ARCHIVE,conf AS LSPK_EA_USERDATA
+	if lspk.openArchive(target,FALSE,FALSE,TRUE)=FALSE Then Print "OpenErr":ExitSub
+
+	Print "Listup archive files infomation:"
+	lspk.slvDir(0,FALSE,NULL,AddressOf(listupCallback),NULL,0)
+
+	printf(ex"\ntotal dir %d, file %d\n",lspk.pfs.GetAllDirCount(),lspk.pfs.GetAllFileCount())
+	Print "-";Date$();Time$()
+End Sub
+
+Type LSPK_EA_USERDATA
+	cLSPK AS *LSPK_ARCHIVE
+	dirName AS BytePtr
+	noDecomp AS BOOL
+	silent AS BOOL
+End Type
+
+Sub extractArchive(target AS BytePtr, noDecomp AS BOOL, silent AS BOOL)
+	Dim lspk As LSPK_ARCHIVE,conf AS LSPK_EA_USERDATA
+	if lspk.openArchive(target)=FALSE Then
+		Print "OpenError"
+		ExitSub
+	End If
+
+	conf.cLSPK=VarPtr(lspk)
+	conf.dirName=lspk.getArchiveName()
+	conf.noDecomp=noDecomp
+	conf.silent=silent
+
+	CreateDirectory(conf.dirName,ByVal NULL)
+	lspk.slvDir(0,FALSE,NULL,AddressOf(extractCallback),VarPtr(conf),0)
+
+	printf("total dir %d, file %d",lspk.pfs.GetAllDirCount(),lspk.pfs.GetAllFileCount())
+End Sub
+
+'ファイルリストアップ
+Function listupCallback(hFind As LSPK_FINDHANDLE,info As VoidPtr,path As *FilePath,userdata As VoidPtr,lv As Long) As BOOL
+	if hFind->isDir=FALSE Then
+		Dim cur As *LSPK_FILEINFO
+		cur=info As *LSPK_FILEINFO
+		cur->path->SetPath(path->GetPath())
+		printFileInfo(info As *LSPK_FILEINFO)
+	End If
+	listupCallback=TRUE
+End Function
+
+'ディレクトリリストアップ
+Function treeCallback(hFind As LSPK_FINDHANDLE,info As VoidPtr,path As *FilePath,userdata As VoidPtr,lv As Long) As BOOL
+	if hFind->isDir Then
+		Dim cur As *LSPK_DIRINFO
+		cur=info As *LSPK_DIRINFO
+		
+		printIndent(lv+1)
+		printf(ex"[%d]%s\n",cur->index,cur->name)
+	End If
+	treeCallback=TRUE
+End Function
+
+
+Function findCallback(hFind As LSPK_FINDHANDLE,info As VoidPtr,path As *FilePath,userdata As VoidPtr,lv As Long) As BOOL
+	if hFind->isDir=FALSE Then
+		Dim cur As *LSPK_FILEINFO
+		cur=info As *LSPK_FILEINFO
+	
+		Dim pfsName As BytePtr
+		pfsName=cur->path->GetFileName()
+
+		if lstrcmpi(pfsName,userdata)=0 Then
+			cur->path->SetPath(path->GetPath())
+			printFileInfo(info As *LSPK_FILEINFO)
+			Dim savepath As StringClass,filename As BytePtr
+			filename=path->GetFileName()
+			savepath.sprintf("found\[pk-%08X]%s",cur->pkh->offset,filename)
+			free(filename)
+			if saveFile(VarPtr(test),info,savepath.ptr)=FALSE then Print "save err";GetLastError()
+		End If
+
+	End If
+	findCallback=TRUE
+End Function
+
+Function extractCallback(hFind As LSPK_FINDHANDLE,info As VoidPtr,path As *FilePath,userdata As VoidPtr,lv As Long) As BOOL
+	Dim savep As StringClass,conf AS *LSPK_EA_USERDATA
+	conf=userdata
+	savep.sprintf("%s\%s",conf->dirName,path->GetPath())
+
+	if hFind->isDir Then
+		CreateDirectory(savep.ptr,ByVal NULL)
+	Else
+		Dim cur As *LSPK_FILEINFO
+		cur=info As *LSPK_FILEINFO
+
+		if conf->silent=FALSE Then printFileInfo(info,path->GetPath())
+		if saveFile(conf->cLSPK,info,savep.ptr)=FALSE And cur->pkh->com_size<>0 then 
+			printf(ex"[SAVE ERR %d]",GetLastError())
+			printFileInfo(info,path->GetPath())	
+			Print
+			extractCallback=TRUE
+			ExitFunction
+		End If
+		
+		if conf->noDecomp=FALSE Then ExecDecompress(savep.ptr)
+	End If
+	extractCallback=TRUE
+End Function
+
+Function ExecDecompress(fileName As BytePtr) As BOOL
+	Dim cmd As *StringClass
+	cmd=new StringClass()
+	cmd->sprintf(ex"\q%s %s\q",decPath,fileName)
+	cmd->replaceChar("/","\")
+	cmd->insertHead("/c ")
+
+	'printf(ex"[cmd] %s\n", cmd->ptr)
+	ShellExecute(NULL, "open", "cmd.exe", cmd->ptr, "", SW_HIDE)
+	delete cmd
+End Function
+
+Function saveFile(cLA As *LSPK_ARCHIVE,info As *LSPK_FILEINFO,saveFileName As BytePtr) As BOOL
+	Dim buffer As BytePtr
+
+	buffer=cLA->getFileBuffer(info)
+	if buffer=NULL Then print"[DELETED]"; :ExitFunction
+
+/*	Dump(buffer,64,info->pkh->offset)
+	Print "gwl;";GetLastError()
+*/
+	Dim out As File
+	if out.openFile(saveFileName,GENERIC_WRITE)=FALSE Then ExitFunction
+	out.write(buffer,info->pkh->com_size)
+	out.close()
+
+	free(buffer)
+	saveFile=TRUE
+End Function
+
+Sub printIndent(deps As Long)
+	Dim i As Long
+	For i= 0 To deps*2
+		PrintPtr(" ",1)
+	Next i
+End Sub
+
+Sub printFileInfo(info As  *LSPK_FILEINFO)(fullPath As BytePtr)
+	Dim size As DWord,sig As BytePtr,dispPath As BytePtr
+	if fullPath=NULL Then
+		dispPath=info->path->GetPath()
+	Else
+		dispPath=fullPath
+	End If
+
+	if info->pkh->com_size > &H100000 Then
+		sig="M"
+		size=info->pkh->com_size / &H100000
+	Elseif info->pkh->com_size > &H0400 Then
+		sig="K"
+		size=info->pkh->com_size / &H0400
+	Else
+		sig="B"
+		size=info->pkh->com_size
+	End If
+
+	printf(ex"[%6d hs:%08X ad:0x%08X si:%4d%s] %s\n", _ 
+		info->index,info->hash ,info->pkh->offset,size,sig,dispPath)
+
+End Sub

@@ -1,4 +1,4 @@
-# LSPK-Extracter
+# LSPK-Extractor
 pk pkh pfs archive extractor for TheLastStory(Wii).
 
 ## [Download](https://github.com/RGBA-CRT/LSPK-Extracter/releases)
@@ -26,11 +26,6 @@ pk pkh pfs archive extractor for TheLastStory(Wii).
 	Extracted files extention are .txt, but contents are may be binary data.
 
 
-## DSDecmp.exeが動作を停止する場合
-	/w オプションで実行間隔を調整して実行してください。  
-	例：LSPK-Extractor.exe boot.pk /w 100  
-	
-	
 ## zlib compress
  + LastStory以外のゲームで、圧縮にzlibが使われているものがある。
  + その場合、opensslをインストールし、
