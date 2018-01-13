@@ -25,6 +25,13 @@ Typedef LSPK_FINDHANDLE = *LSPK_FINDDATA
 'FALSEを返すと終了
 Typedef LSPK_CALLBACK = *Function(hFind As LSPK_FINDHANDLE,info As VoidPtr,path As *FilePath,userdata As VoidPtr,lv As Long) As BOOL
 
+/* LSPK_CALLBACKについて
+ *  ディレクトリ捜査は、捜査関数にコールバック関数を渡す。
+ *  ディレクトリまたはファイルが見つかるとこーーるバックが呼ばれる。
+ *　コールバック関数は、呼ばれたらディレクトリかファイルかを判断し、表示やファイルの保存などを行う。
+ */
+
+
 Class LSPK_ARCHIVE
 Public
 	pkh As PKH_READER
@@ -34,13 +41,10 @@ Private
 	pkPath As FilePath
 
 Public
+	'pkアーカイブを開く（拡張子無視）
 	Function openArchive(pkPathStr As BytePtr)(bNoPKH As BOOL,bNoPFS As BOOL,bNoPK As BOOL) As BOOL
 		pkPath.SetPath(pkPathStr)
 		pkPath.deleteExtension()
-
-/*		print pkPath.genAddedPath(".pfs")
-		print pkPath.genAddedPath(".pkh")
-		print pkPath.genAddedPath(".pk")*/
 
 		Dim ret As BOOL
 		If bNoPKH=FALSE Then ret += pkh.LoadPkhFile(	pkPath.genAddedPath(".pkh"))
@@ -48,13 +52,10 @@ Public
 		If bNoPK =FALSE Then ret += pk.openFile(pkPath.genAddedPath(".pk"),GENERIC_READ)
 		If ret<>TRUE*(3-bNoPKH-bNoPFS-bNoPK) Then openArchive=FALSE : Exitfunction
 
-	'	Print "open ok"
-
-	'	curDir.SetPath("")
 		openArchive=TRUE
 	End Function
 
-	'filenameはNULL可
+	'内部ファイルパスを基にファイルアクセス(filenameはNULL可)
 	Function getFileInfo(path As BytePtr,filename As BytePtr) As *LSPK_FILEINFO
 		Dim ret As *LSPK_FILEINFO, fullpath As *FilePath
 		ret=new_LSPK_FILEINFO()
@@ -75,6 +76,8 @@ Public
 		getFileInfo=ret
 	End Function
 
+	'fileInfoからファイルの実バイナリを取得
+	'使い終わったらfree_bufferで解放
 	Function getFileBuffer(fileinfo As *LSPK_FILEINFO) As BytePtr
 		getFileBuffer=calloc(fileinfo->pkh->com_size)
 		If readPK(fileinfo->pkh->offset,getFileBuffer,fileinfo->pkh->com_size) = FALSE Then
@@ -83,15 +86,18 @@ Public
 		End If		
 	End Function
 
+	'オフセットから直にPKファイルを読む
 	Function readPK(offset As DWord,buffer As BytePtr,length As Long) As BOOL
 		pk.setFilePtr(offset)
 		If pk.read(buffer,length)>=0 Then readPK=TRUE
 	End Function
 
-	Function getCurrentDir() As BytePtr
+/*	Function getCurrentDir() As BytePtr
 		getCurrentDir=curDir.GetPath()
-	End Function
+	End Function*/
 
+	'指定インデックスのディレクトリ情報取得
+	'使い終わればfree_LSPK_DIRINFOで解放
 	Function getDirInfo(index As Long) As *LSPK_DIRINFO
 		Dim ret As *LSPK_DIRINFO
 		ret=new_LSPK_DIRINFO()
@@ -107,6 +113,7 @@ Public
 	'----------------------------------------
 	'
 Private
+	'指定フォルダの再帰調査を開始
 	Function start_slove(dirId As Long,bFindDir As BOOL) As LSPK_FINDHANDLE
 		Dim ret As LSPK_FINDHANDLE,dirInfo As *LSPK_DIRINFO
 		ret=calloc(sizeof(LSPK_FINDDATA))
@@ -125,13 +132,14 @@ Private
 		start_slove=ret
 	EndFunction
 
-	'ファイル名を返す NULL返しで終了
+	'ファイル名を返す NULL返しで終了　解放不要
 	Function next_sloveFile(hFind As LSPK_FINDHANDLE) As BytePtr
 		If hFind->current >= hFind->stop Then ExitFunction
 		next_sloveFile=pfs.GetFileStr(hFind->current)		
 		hFind->current++
 	End Function
 
+	'次のディレクトリ
 	Function next_sloveDir(hFind As LSPK_FINDHANDLE) As *LSPK_DIRINFO
 		If hFind->current >= hFind->stop Then ExitFunction
 		next_sloveDir=getDirInfo(hFind->current)
@@ -162,6 +170,7 @@ Public
 
 	'----------------------------------------
 
+	'ディレクトリID, ディレクトリオンリーフラグ,パス（ユーザー側はNULL）,コールバック,ユーザーデータ,再帰レベル
 	Sub slvDir(dirid As Long,bDirOnly As BOOL,path As *FilePath,callback As LSPK_CALLBACK,userdata As VoidPtr,lv As Long)
 		Dim bDelPath As BOOL
 		If path=NULL Then

@@ -1,0 +1,1 @@
+LSPK-Extractor.exe /dec zlib.bat %1

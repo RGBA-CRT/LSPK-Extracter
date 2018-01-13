@@ -32,6 +32,7 @@ pk pkh pfs archive extractor for TheLastStory(Wii).
 	> LSPK-Extractor.exe boot.pk /dec zlib.bat  
  + というようにすると、zlib解凍される。
  + zlib.batのところを変更すれば様々な形式に対応できるはず。
+ + default decompresser is DSDecomp. /dec option able to change decompresser.
 
 
 ## File format infomation

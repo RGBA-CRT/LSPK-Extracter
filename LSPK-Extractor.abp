@@ -1,4 +1,5 @@
-'TheLastStory pk pkh pfs Extractor	Programmed by RGBA_CRT 2016. Lang = ActiveBasic v4
+'TheLastStory pk pkh pfs Extractor	Programmed by RGBA_CRT 2017. Lang : ActiveBasic v4
+
 #include<RGBALib.sbp>
 #include "LSPK-lib.sbp"
 #console
@@ -12,6 +13,13 @@ setDecompExeName(DEFAULT_DECOMPRESSER)
 Main()
 End
 
+/*
+Enum LSPK_MODE
+	LSPKM_EXTRACT
+	LSPKM_VIEW
+	LSPKM_FIND
+End Enum
+*/
 
 Sub Main()
 	Dim noDecomp As BOOL
@@ -19,6 +27,7 @@ Sub Main()
 	Dim silent AS BOOL
 	Dim target AS String
 	Dim deompExe AS BytePtr
+	Dim findName AS BytePtr
 	Dim cmd AS CommandLine
 	Dim i aS Long
 
@@ -32,12 +41,18 @@ Sub Main()
 			viewMode=TRUE
 
 		Elseif cmd.cmpCmd(i,"/e") then
-			Print "Extract only Mode."
+			Print "Extract only Mode (no decompress)"
 			noDecomp=TRUE
 
 		Elseif cmd.cmpCmd(i,"/s1") then
 			Print "Silent mode"			
 			silent=TRUE
+
+		Else if cmd.cmpCmd(i,"/f") then
+			i++
+			findName=cmd.GetCmd(i)
+			Print "Find file : %s"
+			viewMode=TRUE
 
 		Elseif cmd.cmpCmd(i,"/dec") then
 			i++
@@ -140,7 +155,7 @@ Function treeCallback(hFind As LSPK_FINDHANDLE,info As VoidPtr,path As *FilePath
 	treeCallback=TRUE
 End Function
 
-
+'ファイル名で検索
 Function findCallback(hFind As LSPK_FINDHANDLE,info As VoidPtr,path As *FilePath,userdata As VoidPtr,lv As Long) As BOOL
 	if hFind->isDir=FALSE Then
 		Dim cur As *LSPK_FILEINFO
@@ -163,6 +178,7 @@ Function findCallback(hFind As LSPK_FINDHANDLE,info As VoidPtr,path As *FilePath
 	findCallback=TRUE
 End Function
 
+'展開
 Function extractCallback(hFind As LSPK_FINDHANDLE,info As VoidPtr,path As *FilePath,userdata As VoidPtr,lv As Long) As BOOL
 	Dim savep As StringClass,conf AS *LSPK_EA_USERDATA
 	conf=userdata
@@ -188,6 +204,7 @@ Function extractCallback(hFind As LSPK_FINDHANDLE,info As VoidPtr,path As *FileP
 	extractCallback=TRUE
 End Function
 
+'圧縮解除コマンドの実行
 Function ExecDecompress(fileName As BytePtr) As BOOL
 	Dim cmd As *StringClass
 	cmd=new StringClass()
@@ -200,6 +217,7 @@ Function ExecDecompress(fileName As BytePtr) As BOOL
 	delete cmd
 End Function
 
+'PKファイルの中身を保存
 Function saveFile(cLA As *LSPK_ARCHIVE,info As *LSPK_FILEINFO,saveFileName As BytePtr) As BOOL
 	Dim buffer As BytePtr
 
