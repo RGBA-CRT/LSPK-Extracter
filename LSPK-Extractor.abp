@@ -117,7 +117,8 @@ End Type
 Sub extractArchive(target AS BytePtr, noDecomp AS BOOL, silent AS BOOL)
 	Dim lspk As LSPK_ARCHIVE,conf AS LSPK_EA_USERDATA
 	if lspk.openArchive(target)=FALSE Then
-		Print "OpenError"
+'		Print "OpenError"
+		printf("Archive Open Error!!! GLE=%d",GetLastError())
 		ExitSub
 	End If
 
