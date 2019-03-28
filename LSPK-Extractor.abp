@@ -98,7 +98,10 @@ End Sub
 
 Sub viewArchive(target AS BytePtr)
 	Dim lspk As LSPK_ARCHIVE,conf AS LSPK_EA_USERDATA
-	if lspk.openArchive(target,FALSE,FALSE,TRUE)=FALSE Then Print "OpenErr":ExitSub
+	if lspk.openArchive(target,FALSE,FALSE,TRUE)=FALSE Then 	
+		printf("Archive Open Error!!! GLE=%d",GetLastError())
+		'ExitSub
+	Endif
 
 	Print "Listup archive files infomation:"
 	lspk.slvDir(0,FALSE,NULL,AddressOf(listupCallback),NULL,0)
@@ -119,7 +122,7 @@ Sub extractArchive(target AS BytePtr, noDecomp AS BOOL, silent AS BOOL)
 	if lspk.openArchive(target)=FALSE Then
 '		Print "OpenError"
 		printf("Archive Open Error!!! GLE=%d",GetLastError())
-		ExitSub
+		'ExitSub
 	End If
 
 	conf.cLSPK=VarPtr(lspk)
