@@ -1,10 +1,10 @@
-'TheLastStory pk archive library for AB4 - RGBA_CRT 2017
+'TheLastStory pk archive library for AB4 - RGBA_CRT 2017-2018
 
 Type LSPK_FILEINFO
 	index As Long
 	hash As DWord
 	path As *FilePath
-	pkh As *PKH_FILE_DATA
+	pkh As *PKH_INFO_BLOCK
 End Type
 
 Type LSPK_DIRINFO
@@ -31,6 +31,23 @@ Typedef LSPK_CALLBACK = *Function(hFind As LSPK_FINDHANDLE,info As VoidPtr,path 
  *　コールバック関数は、呼ばれたらディレクトリかファイルかを判断し、表示やファイルの保存などを行う。
  */
 
+Enum LSPK_ARCHIVE_ERROR
+	LSPK_OK  = 0
+	LSPK_ERR_PKH_OPEN
+	LSPK_ERR_PKH_FORMAT
+	LSPK_ERR_PFS
+	LSPK_ERR_PK
+	_LSPK_ERR_COUNT
+End Enum
+
+Dim LSPK_ARHIVE_ERROR_TEXT_TBL[_LSPK_ERR_COUNT] = [ _
+	"No error",_
+	"Can't open PKH file.",_
+	"Unknown PKH File Format. (invalid Block Size)",_
+	"LSPK_ERR_PFS",_
+	"LSPK_ERR_PK",_
+] AS BytePtr
+
 
 Class LSPK_ARCHIVE
 Public
@@ -39,18 +56,47 @@ Public
 	pk As File
 Private
 	pkPath As FilePath
+	lastErrorID As LSPK_ARCHIVE_ERROR
+	lastErrorGLE AS DWord
 
 Public
 	'pkアーカイブを開く（拡張子無視）
 	Function openArchive(pkPathStr As BytePtr)(bNoPKH As BOOL,bNoPFS As BOOL,bNoPK As BOOL) As BOOL
+		'default return ERROR
+		openArchive = FALSE
+		
 		pkPath.SetPath(pkPathStr)
 		pkPath.deleteExtension()
+'debug
+		If bNoPKH=FALSE Then 
+			lastErrorID = pkh.LoadPkhFile(pkPath.genAddedPath(".pkh"))
+			If lastErrorID <> LSPK_OK Then
+				lastErrorGLE = GetLastError()
+				ExitFunction
+			Endif			
 
-		Dim ret As BOOL
-		If bNoPKH=FALSE Then ret += pkh.LoadPkhFile(	pkPath.genAddedPath(".pkh"))
-		If bNoPFS=FALSE Then ret += pfs.LoadPfsFile( pkPath.genAddedPath(".pfs"))
-		If bNoPK =FALSE Then ret += pk.openFile(pkPath.genAddedPath(".pk"),GENERIC_READ)
-		If ret<>TRUE*(3-bNoPKH-bNoPFS-bNoPK) Then openArchive=FALSE : Exitfunction
+			lastErrorID = LSPK_OK
+		Endif
+
+		If bNoPFS=FALSE Then 
+			If pfs.LoadPfsFile( pkPath.genAddedPath(".pfs")) = FALSE Then
+				lastErrorID  = LSPK_ERR_PFS
+				lastErrorGLE = GetLastError()
+				ExitFunction
+			Endif			
+		Endif
+
+		If bNoPK=FALSE Then 
+			If pk.openFile(pkPath.genAddedPath(".pk"),GENERIC_READ) = FALSE Then
+				lastErrorID  = LSPK_ERR_PK
+				lastErrorGLE = GetLastError()
+				ExitFunction
+			Endif			
+		Endif
+
+'		If bNoPFS=FALSE Then ret += pfs.LoadPfsFile( pkPath.genAddedPath(".pfs"))
+'		If bNoPK =FALSE Then ret += pk.openFile(pkPath.genAddedPath(".pk"),GENERIC_READ)
+'		If ret<>TRUE*(3-bNoPKH-bNoPFS-bNoPK) Then openArchive=FALSE : Exitfunction
 
 		openArchive=TRUE
 	End Function
@@ -80,15 +126,15 @@ Public
 	'使い終わったらfree_bufferで解放
 	Function getFileBuffer(fileinfo As *LSPK_FILEINFO) As BytePtr
 		getFileBuffer=calloc(fileinfo->pkh->com_size)
-		If readPK(fileinfo->pkh->offset,getFileBuffer,fileinfo->pkh->com_size) = FALSE Then
+		If readPK(fileinfo->pkh->offsetLow,fileinfo->pkh->offsetHigh,getFileBuffer,fileinfo->pkh->com_size) = FALSE Then
 			free(getFileBuffer)
 			getFileBuffer=NULL
 		End If		
 	End Function
 
 	'オフセットから直にPKファイルを読む
-	Function readPK(offset As DWord,buffer As BytePtr,length As Long) As BOOL
-		pk.setFilePtr(offset)
+	Function readPK(offsetLo As DWord, offsetHi AS DWord, buffer As BytePtr, length As Long) As BOOL
+		pk.setFilePtr(offsetLo, offsetHi)
 		If pk.read(buffer,length)>=0 Then readPK=TRUE
 	End Function
 
@@ -110,6 +156,19 @@ Public
 	Function getArchiveName() AS BytePtr
 		getArchiveName=pkPath.GetFileName()
 	End Function
+
+	Function getLastErrorID() AS Long
+		getLastErrorID = lastErrorID
+	EndFunction
+
+	Function getLastErrorText() AS BytePtr
+		if lastErrorID >= _LSPK_ERR_COUNT Then
+			getLastErrorText="[[UNKNOWN ERROR]]"
+			ExitFunction
+		Endif
+		
+		getLastErrorText = LSPK_ARHIVE_ERROR_TEXT_TBL[lastErrorID]
+	EndFunction
 	'----------------------------------------
 	'
 Private
@@ -368,9 +427,27 @@ Public
 End Class
 
 '---------------------------------------------------------------------------------------------
-Type PKH_FILE_DATA
+Type PKH_INFO_BLOCK_24
+	hash As DWord
+	dummy1 AS DWord
+	offsetHigh AS DWord
+	offsetLow As DWord
+	dec_size As DWord
+	com_size As DWord
+EndType
+
+Type PKH_INFO_BLOCK_16
 	hash As DWord
 	offset As DWord
+	dec_size As DWord
+	com_size As DWord
+EndType
+
+'抽象化されたIFNOBLOCKのデータ
+Type PKH_INFO_BLOCK
+	hash As DWord
+	offsetLow As DWord
+	offsetHigh As DWord
 	dec_size As DWord
 	com_size As DWord
 EndType
@@ -378,7 +455,8 @@ EndType
 Class PKH_READER
 Private
 	cFile As DWord	'file count
-	PKH_Table As *PKH_FILE_DATA
+	PKH_Table As *PKH_INFO_BLOCK
+	blockSize AS DWord
 
 Public
 
@@ -391,10 +469,12 @@ Public
 		If PKH_Table<>0 Then free(PKH_Table):PKH_Table=0
 	EndSub
 
-	Function LoadPkhFile(FileName As BytePtr) As BOOL
+	Function LoadPkhFile(FileName As BytePtr) As LSPK_ARCHIVE_ERROR
 		Dim hFile As HANDLE
 		hFile=OpenFile(FileName,GENERIC_READ)
-		If hFile=-1 or GetFileSize(hFile,NULL)<5 then LoadPkhFile=FALSE:Exitfunction
+		If hFile=-1 then 
+			LoadPkhFile = LSPK_ERR_PKH_OPEN
+		Endif
 
 		'Init Memory
 		Destroy()
@@ -402,25 +482,84 @@ Public
 		'Load File Count
 		LoadFile(hFile,VarPtr(cFile),sizeof(DWord))
 		ChangeEndianDW(cFile)
-		If cFile*sizeof(PKH_FILE_DATA)+sizeof(DWord) <> GetFileSize(hFile,NULL) Then LoadPkhFile=FALSE:ExitFunction
 
-		'Load PKH_FILE_DATA (.pk file offset data)
-		PKH_Table=calloc(GetFileSize(hFile,NULL)+20)
-		LoadFile(hFile,PKH_Table,GetFileSize(hFile,NULL)-sizeof(DWord))
-		Dim i As Long
-		For i = 0 To cFile-1
-			ChangeEndianDW(PKH_Table[i].hash)
-			ChangeEndianDW(PKH_Table[i].offset)
-			ChangeEndianDW(PKH_Table[i].com_size)
-			ChangeEndianDW(PKH_Table[i].dec_size)
-		Next i
+		Dim tableSize AS DWord
+		tableSize = GetFileSize(hFile,NULL) - sizeof(DWord) 
+
+	/*
+		If cFile*sizeof(PKH_INFO_BLOCK)+sizeof(DWord) <> GetFileSize(hFile,NULL) Then 
+			printf(ex"[Warning][PKH] ファイル数とPKHサイズが一致しません。\n")
+			'cFile = ( GetFileSize(hFile,NULL) - sizeof(DWord) ) / sizeof(PKH_INFO_BLOCK)
+			LoadPkhFile=FALSE:ExitFunction
+		Endif
+		
+		PKH_Table=calloc(cFile*sizeof(PKH_INFO_BLOCK)+20)
+		*/
+
+		'Load RAW Table
+		Dim rawTableBuffer AS BytePtr
+		rawTableBuffer = calloc( tableSize+20 )
+		LoadFile(hFile,rawTableBuffer,tableSize)
+debug
+		'RAW Table to Abstracted PKH Table
+		LoadPkhFile = BuildPkhTable(cFile, rawTableBuffer, tableSize)
+		printf(ex"PkhInfo:\n Count of files : %d\n Actual table size : %d\n Block Size : %d\n\n", cFile, tableSize, blockSize )
+		if LoadPkhFile <> LSPK_OK Then
+			ExitFunction
+		Endif
+
+		free(rawTableBuffer) : rawTableBuffer = NULL
 
 		CloseHandle(hFile)
 
-		LoadPkhFile=TRUE
+		LoadPkhFile = LSPK_OK
 	EndFunction
 
-	Function GetPKH_Table(ID As DWord) As *PKH_FILE_DATA
+	Function BuildPkhTable(fileCount AS DWord, rawTable AS VoidPtr, tableSize AS DWord) As LSPK_ARCHIVE_ERROR
+		'Dim blockSize AS DWord  // クラス変数に
+		blockSize = tableSize / fileCount
+
+		Dim i aS Long
+
+		if blockSize = 16 Then
+			Dim pkh16 AS *PKH_INFO_BLOCK_16
+			pkh16=rawTable
+
+			'allocate PKH TABLE buffer
+			PKH_Table = calloc( sizeof(PKH_INFO_BLOCK) * fileCount )
+
+			For i = 0 To cFile-1
+				PKH_Table[i].hash 		= ReverseDWord(pkh16[i].hash)
+				PKH_Table[i].offsetLow  = ReverseDWord(pkh16[i].offset)
+				PKH_Table[i].offsetHigh = 0
+				PKH_Table[i].com_size   = ReverseDWord(pkh16[i].com_size)
+				PKH_Table[i].dec_size   = ReverseDWord(pkh16[i].dec_size)
+			Next i
+
+		Elseif blockSize = 24 Then
+			'rawTable to _24
+			Dim pkh24 AS *PKH_INFO_BLOCK_24
+			pkh24 = rawTable
+
+			'allocate PKH TABLE buffer
+			PKH_Table = calloc( sizeof(PKH_INFO_BLOCK) * fileCount )
+
+			For i = 0 To cFile-1
+				PKH_Table[i].hash 		= ReverseDWord(pkh24[i].hash)
+				PKH_Table[i].offsetLow  = ReverseDWord(pkh24[i].offsetLow)
+				PKH_Table[i].offsetHigh = ReverseDWord(pkh24[i].offsetHigh)
+				PKH_Table[i].com_size   = ReverseDWord(pkh24[i].com_size)
+				PKH_Table[i].dec_size   = ReverseDWord(pkh24[i].dec_size)
+			Next i
+		Else 
+			BuildPkhTable = LSPK_ERR_PKH_FORMAT
+			ExitFunction
+		End If
+
+		BuildPkhTable = LSPK_OK
+	End Function
+
+	Function GetPKH_Table(ID As DWord) As *PKH_INFO_BLOCK
 		GetPKH_Table=VarPtr(PKH_Table[ID])
 	EndFunction
 
@@ -478,6 +617,8 @@ Public
 	EndFunction
 
 End Class
+
+
 
 '----------------------------------------------------------------------
 

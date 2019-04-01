@@ -1,4 +1,6 @@
 'TheLastStory pk pkh pfs Extractor	Programmed by RGBA_CRT 2017. Lang : ActiveBasic v4
+'v1.0 : 書き直し
+'v2.0 : PKH24（4GB以上対応版）に対応
 
 #include<RGBALib.sbp>
 #include "LSPK-lib.sbp"
@@ -6,7 +8,7 @@
 Const DEFAULT_DECOMPRESSER = "DSDecmp.exe"
 Dim decPath As BytePtr
 
-Print ex"The Last Story .pk .pkh .pfs Extracter v1.0         Programmed by RGBA_CRT 2016-2017\n"
+Print ex"The Last Story .pk .pkh .pfs Extracter v2.0         Programmed by RGBA_CRT 2016-2018\n"
 
 'デフォルトでDSD
 setDecompExeName(DEFAULT_DECOMPRESSER)
@@ -32,7 +34,7 @@ Sub Main()
 	Dim i aS Long
 
 #IFDEF _DEBUG
-	cmd.ParseCommandLine("lp old\archive.pk /e ")
+	cmd.ParseCommandLine("lp archive.pk /v ")
 #ENDIF
 
 	For i = 1 To cmd.GetCount()
@@ -98,15 +100,21 @@ End Sub
 
 Sub viewArchive(target AS BytePtr)
 	Dim lspk As LSPK_ARCHIVE,conf AS LSPK_EA_USERDATA
-	if lspk.openArchive(target,FALSE,FALSE,TRUE)=FALSE Then 	
-		printf("Archive Open Error!!! GLE=%d",GetLastError())
-		'ExitSub
+		
+	if lspk.openArchive(target,FALSE,FALSE,TRUE)=FALSE Then 
+		printf(ex"Archive Open Error!!! %s (GLE=%d, iEID=%d)\n",lspk.getLastErrorText(),GetLastError(),lspk.getLastErrorID())
+		ExitSub
 	Endif
 
 	Print "Listup archive files infomation:"
-	lspk.slvDir(0,FALSE,NULL,AddressOf(listupCallback),NULL,0)
 
-	printf(ex"\ntotal dir %d, file %d\n",lspk.pfs.GetAllDirCount(),lspk.pfs.GetAllFileCount())
+	'時間計測
+	Dim lt AS DWord
+	lt = GetTickCount()
+	lspk.slvDir(0,FALSE,NULL,AddressOf(listupCallback),NULL,0)
+	lt = GetTickCount() - lt
+
+	printf(ex"\ntotal dir %d, file %d, process time %dms\n",lspk.pfs.GetAllDirCount(),lspk.pfs.GetAllFileCount(),lt)
 	Print "-";Date$();Time$()
 End Sub
 
@@ -266,7 +274,18 @@ Sub printFileInfo(info As  *LSPK_FILEINFO)(fullPath As BytePtr)
 		size=info->pkh->com_size
 	End If
 
-	printf(ex"[%6d hs:%08X ad:0x%08X si:%4d%s] %s\n", _ 
-		info->index,info->hash ,info->pkh->offset,size,sig,dispPath)
+	'ベンチマーク結果
+	'テスト対象：Archive.pk
+	'printf  = 1482ms 1450ms
+	'printf2 = 1436ms 1467ms
+	'かわらん！
+	printf(ex"[%6d hs:%08X ad:%02X %08X si:%4d%s] %s\n", _ 
+		info->index,_
+		info->hash,_
+		info->pkh->offsetHigh, info->pkh->offsetLow,_
+		size,_
+		sig ,_
+		dispPath	
+	)
 
 End Sub
