@@ -34,7 +34,7 @@ Sub Main()
 	Dim i aS Long
 
 #IFDEF _DEBUG
-	cmd.ParseCommandLine("lp archive.pk /v ")
+	cmd.ParseCommandLine("lp 0.pk  /e")
 #ENDIF
 
 	For i = 1 To cmd.GetCount()
@@ -183,7 +183,7 @@ Function findCallback(hFind As LSPK_FINDHANDLE,info As VoidPtr,path As *FilePath
 			filename=path->GetFileName()
 			savepath.sprintf("found\[pk-%08X]%s",cur->pkh->offset,filename)
 			free(filename)
-			if saveFile(VarPtr(test),info,savepath.ptr)=FALSE then Print "save err";GetLastError()
+			if saveFile(VarPtr(test),info,savepath.ptr)=FALSE then Print "save err";:debug:GetLastError()
 		End If
 
 	End If
@@ -233,8 +233,14 @@ End Function
 Function saveFile(cLA As *LSPK_ARCHIVE,info As *LSPK_FILEINFO,saveFileName As BytePtr) As BOOL
 	Dim buffer As BytePtr
 
+/*	buffer=cLA->getFileBuffer(info)
+	if buffer=NULL Then debug*/
 	buffer=cLA->getFileBuffer(info)
-	if buffer=NULL Then print"[DELETED]"; :ExitFunction
+	if buffer=NULL Then 
+		print"[DELETED]"; 
+		SetLastError(0)
+		ExitFunction
+	endif
 
 /*	Dump(buffer,64,info->pkh->offset)
 	Print "gwl;";GetLastError()
