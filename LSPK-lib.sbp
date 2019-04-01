@@ -534,6 +534,10 @@ debug
 				PKH_Table[i].offsetHigh = 0
 				PKH_Table[i].com_size   = ReverseDWord(pkh16[i].com_size)
 				PKH_Table[i].dec_size   = ReverseDWord(pkh16[i].dec_size)
+
+				if PKH_Table[i].com_size = 0 Then
+					PKH_Table[i].com_size = PKH_Table[i].dec_size
+				Endif
 			Next i
 
 		Elseif blockSize = 24 Then
@@ -550,6 +554,10 @@ debug
 				PKH_Table[i].offsetHigh = ReverseDWord(pkh24[i].offsetHigh)
 				PKH_Table[i].com_size   = ReverseDWord(pkh24[i].com_size)
 				PKH_Table[i].dec_size   = ReverseDWord(pkh24[i].dec_size)
+				
+				if PKH_Table[i].com_size = 0 Then
+					PKH_Table[i].com_size = PKH_Table[i].dec_size
+				Endif
 			Next i
 		Else 
 			BuildPkhTable = LSPK_ERR_PKH_FORMAT
