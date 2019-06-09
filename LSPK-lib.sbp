@@ -48,6 +48,20 @@ Dim LSPK_ARHIVE_ERROR_TEXT_TBL[_LSPK_ERR_COUNT] = [ _
 	"LSPK_ERR_PK",_
 ] AS BytePtr
 
+Enum LSPK_COMPRESS_TYPE
+	LSPK_CTYPE_UNKNOWN = 0
+	LSPK_CTYPE_ZLIB
+	LSPK_CTYPE_ZLIB_2
+	LSPK_CTYPE_LZ1X
+	_LSPK_CTYPE_COUNT
+End Enum
+
+Dim LSPK_COMPRESS_TYPE_TEXT_TBL[_LSPK_CTYPE_COUNT] = [ _
+	"Unknown",_
+	"Zlib Compress",_
+	"Zlib Compress (maybe)",_
+	"LZ10/LZ11 Compress"
+] AS BytePtr
 
 Class LSPK_ARCHIVE
 Public
@@ -117,7 +131,7 @@ Public
 			free_LSPK_FILEINFO(ret)
 			ExitFunction
 		End If
-		ret->pkh = pkh.GetPKH_Table(ret->index)
+		ret->pkh = pkh.GetPkhInfoBlock(ret->index)
 
 		getFileInfo=ret
 	End Function
@@ -135,7 +149,9 @@ Public
 	'オフセットから直にPKファイルを読む
 	Function readPK(offsetLo As DWord, offsetHi AS DWord, buffer As BytePtr, length As Long) As BOOL
 		pk.setFilePtr(offsetLo, offsetHi)
-		If pk.read(buffer,length)>=0 Then readPK=TRUE
+		If pk.read(buffer,length)>=0 Then 
+			readPK = TRUE
+		End If
 	End Function
 
 /*	Function getCurrentDir() As BytePtr
@@ -169,6 +185,53 @@ Public
 		
 		getLastErrorText = LSPK_ARHIVE_ERROR_TEXT_TBL[lastErrorID]
 	EndFunction
+
+	Function checkCompressType(id AS DWord) AS LSPK_COMPRESS_TYPE
+		Dim fileInfo AS *PKH_INFO_BLOCK
+		fileInfo = pkh.GetPkhInfoBlock(id)
+				
+		Dim firstBytes[3] As Byte,ret AS LSPK_COMPRESS_TYPE
+		Dim isPkLoaded As BOOL
+
+		if pk.getHandle() = NULL Then		
+			isPkLoaded = TRUE
+			If pk.openFile(pkPath.genAddedPath(".pk"),GENERIC_READ) = FALSE Then
+				checkCompressType=LSPK_CTYPE_UNKNOWN
+				ExitFunction
+			Endif
+		Else
+			isPkLoaded = FALSE
+		Endif
+		
+		if readPK(fileInfo->offsetLow, fileInfo->offsetHigh, firstBytes,4) = FALSE Then
+			checkCompressType = LSPK_CTYPE_UNKNOWN
+			debug
+			ExitFunction
+		Endif
+
+		Select Case firstBytes[0]
+			Case &H78
+				ret = LSPK_CTYPE_ZLIB
+			Case &H10
+				ret = LSPK_CTYPE_LZ1X
+			Case &H11
+				ret = LSPK_CTYPE_LZ1X
+			Case Else
+				'下位4ビットが08hだったらZLIB圧縮の可能性がかすかにある
+				if (firstBytes[0] And &H0F) = &H08 Then
+					ret = LSPK_CTYPE_ZLIB_2
+				Else
+					ret = LSPK_CTYPE_UNKNOWN
+				End If
+		End Select
+
+		if isPkLoaded Then
+			pk.close()
+		End If
+
+		checkCompressType = ret
+	End Function
+
 	'----------------------------------------
 	'
 Private
@@ -334,7 +397,7 @@ Type PFS_DIR_INFO
 EndType
 
 Class PFS_READER
-private
+Private
 	dir_count As DWord
 	file_count As DWord
 	dirInfo As *PFS_DIR_INFO	'(24 * num of dir) bytes
@@ -500,10 +563,10 @@ Public
 		Dim rawTableBuffer AS BytePtr
 		rawTableBuffer = calloc( tableSize+20 )
 		LoadFile(hFile,rawTableBuffer,tableSize)
-debug
+
 		'RAW Table to Abstracted PKH Table
 		LoadPkhFile = BuildPkhTable(cFile, rawTableBuffer, tableSize)
-		printf(ex"PkhInfo:\n Count of files : %d\n Actual table size : %d\n Block Size : %d\n\n", cFile, tableSize, blockSize )
+		printf(ex"PkhInfo:\n Count of files : %d\n Actual table size : %d bytes\n Block Size : %d bytes\n\n", cFile, tableSize, blockSize )
 		if LoadPkhFile <> LSPK_OK Then
 			ExitFunction
 		Endif
@@ -515,12 +578,14 @@ debug
 		LoadPkhFile = LSPK_OK
 	EndFunction
 
+	' PKHの種類が2つあるので中間形式に変換
 	Function BuildPkhTable(fileCount AS DWord, rawTable AS VoidPtr, tableSize AS DWord) As LSPK_ARCHIVE_ERROR
 		'Dim blockSize AS DWord  // クラス変数に
 		blockSize = tableSize / fileCount
 
 		Dim i aS Long
 
+		' PKH16の場合 
 		if blockSize = 16 Then
 			Dim pkh16 AS *PKH_INFO_BLOCK_16
 			pkh16=rawTable
@@ -567,8 +632,13 @@ debug
 		BuildPkhTable = LSPK_OK
 	End Function
 
-	Function GetPKH_Table(ID As DWord) As *PKH_INFO_BLOCK
-		GetPKH_Table=VarPtr(PKH_Table[ID])
+	Function GetPkhInfoBlock(ID As DWord) As *PKH_INFO_BLOCK
+		if ID <= cFile Then
+			GetPkhInfoBlock=VarPtr(PKH_Table[ID])
+		Else
+			GetPkhInfoBlock=NULL
+			debug
+		Endif
 	EndFunction
 
 	Function GetFileCount() As Long

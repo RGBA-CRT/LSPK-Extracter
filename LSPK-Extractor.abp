@@ -1,6 +1,7 @@
 'TheLastStory pk pkh pfs Extractor	Programmed by RGBA_CRT 2017. Lang : ActiveBasic v4
 'v1.0 : 書き直し
 'v2.0 : PKH24（4GB以上対応版）に対応
+'v2.1 : 圧縮フォーマット推定機能追加, オプション変更
 
 #include<RGBALib.sbp>
 #include "LSPK-lib.sbp"
@@ -8,7 +9,7 @@
 Const DEFAULT_DECOMPRESSER = "DSDecmp.exe"
 Dim decPath As BytePtr
 
-Print ex"The Last Story .pk .pkh .pfs Extracter v2.0         Programmed by RGBA_CRT 2016-2018\n"
+Print ex"The Last Story .pk .pkh .pfs Extracter v2.1         Programmed by RGBA_CRT 2016-2019\n"
 
 'デフォルトでDSD
 setDecompExeName(DEFAULT_DECOMPRESSER)
@@ -33,22 +34,23 @@ Sub Main()
 	Dim cmd AS CommandLine
 	Dim i aS Long
 
+	silent=TRUE
 #IFDEF _DEBUG
-	cmd.ParseCommandLine("lp 0.pk  /e")
+	cmd.ParseCommandLine("lp archive.pk /e ")
 #ENDIF
 
 	For i = 1 To cmd.GetCount()
-		if cmd.cmpCmd(i,"/v") then
-			Print "PFS Viewer Mode."
+		if cmd.cmpCmd(i,"/l") then
+			Print "Listup files."
 			viewMode=TRUE
 
 		Elseif cmd.cmpCmd(i,"/e") then
 			Print "Extract only Mode (no decompress)"
 			noDecomp=TRUE
 
-		Elseif cmd.cmpCmd(i,"/s1") then
-			Print "Silent mode"			
-			silent=TRUE
+		Elseif cmd.cmpCmd(i,"/v") then
+			Print "Verbose mode."			
+			silent=FALSE
 
 		Else if cmd.cmpCmd(i,"/f") then
 			i++
@@ -86,7 +88,7 @@ Sub Main()
 End Sub
 
 Sub PrintUsage()
-	printf(ex"Usage : PrintUsaget [/s1][/v][/e][/dec exename] pkfile\n\t/s1 - Reduce display amount.\n\t/v - View directory/file tree.\n\t/e - extract only (do not decompless)\n\t/dec - chenge decompresser.\n")
+	printf(ex"Usage : PrintUsaget [/v][/l][/e][/dec exename] pkfile\n\t/v - Verbose mode.\n\t/l - Listup files.\n\t/e - Extract only (do not decompless) mode.\n\t/dec - Chenge decompresser.\n")
 EndSub
 
 Sub setDecompExeName(exename As BytePtr)
@@ -106,7 +108,9 @@ Sub viewArchive(target AS BytePtr)
 		ExitSub
 	Endif
 
-	Print "Listup archive files infomation:"
+	printPkInfo(VarPtr(lspk))
+
+	PrintPtr(Ex"Archive Contents List:")
 
 	'時間計測
 	Dim lt AS DWord
@@ -132,6 +136,8 @@ Sub extractArchive(target AS BytePtr, noDecomp AS BOOL, silent AS BOOL)
 		printf("Archive Open Error!!! GLE=%d",GetLastError())
 		'ExitSub
 	End If
+	
+	printPkInfo(VarPtr(lspk))
 
 	conf.cLSPK=VarPtr(lspk)
 	conf.dirName=lspk.getArchiveName()
@@ -139,9 +145,11 @@ Sub extractArchive(target AS BytePtr, noDecomp AS BOOL, silent AS BOOL)
 	conf.silent=silent
 
 	CreateDirectory(conf.dirName,ByVal NULL)
+	
+	PrintPtr(Ex"Extracting.")
 	lspk.slvDir(0,FALSE,NULL,AddressOf(extractCallback),VarPtr(conf),0)
 
-	printf("total dir %d, file %d",lspk.pfs.GetAllDirCount(),lspk.pfs.GetAllFileCount())
+	printf(Ex"\ntotal dir %d, file %d\n",lspk.pfs.GetAllDirCount(),lspk.pfs.GetAllFileCount())
 End Sub
 
 'ファイルリストアップ
@@ -202,11 +210,23 @@ Function extractCallback(hFind As LSPK_FINDHANDLE,info As VoidPtr,path As *FileP
 		Dim cur As *LSPK_FILEINFO
 		cur=info As *LSPK_FILEINFO
 
-		if conf->silent=FALSE Then printFileInfo(info,path->GetPath())
-		if saveFile(conf->cLSPK,info,savep.ptr)=FALSE And cur->pkh->com_size<>0 then 
-			printf(ex"[SAVE ERR %d]",GetLastError())
+		if conf->silent=FALSE Then
+			printFileInfo(info,path->GetPath())
+		Else
+			PrintPtr(".")
+		Endif
+
+		SetLastError(0)
+		if saveFile(conf->cLSPK,info,savep.ptr)=FALSE  then 
+			if conf->silent Then PrintPtr(Ex"\n")
+
+			if cur->pkh->com_size = 0 Then
+				PrintPtr(Ex"[DELETED]") 
+			Else
+				printf(ex"[SAVE ERR %d]",GetLastError())
+			Endif
 			printFileInfo(info,path->GetPath())	
-			Print
+
 			extractCallback=TRUE
 			ExitFunction
 		End If
@@ -237,18 +257,18 @@ Function saveFile(cLA As *LSPK_ARCHIVE,info As *LSPK_FILEINFO,saveFileName As By
 	if buffer=NULL Then debug*/
 	buffer=cLA->getFileBuffer(info)
 	if buffer=NULL Then 
-		print"[DELETED]"; 
-		SetLastError(0)
 		ExitFunction
 	endif
 
 /*	Dump(buffer,64,info->pkh->offset)
 	Print "gwl;";GetLastError()
 */
-	Dim out As File
-	if out.openFile(saveFileName,GENERIC_WRITE)=FALSE Then ExitFunction
-	out.write(buffer,info->pkh->com_size)
-	out.close()
+	Dim out As *File
+	out = new File()
+	if out->openFile(saveFileName,GENERIC_WRITE)=FALSE Then ExitFunction
+	out->write(buffer,info->pkh->com_size)
+	out->close()
+	delete out
 
 	free(buffer)
 	saveFile=TRUE
@@ -294,4 +314,47 @@ Sub printFileInfo(info As  *LSPK_FILEINFO)(fullPath As BytePtr)
 		dispPath	
 	)
 
+End Sub
+
+
+
+Sub printPkInfo(lspk AS *LSPK_ARCHIVE)
+	Dim compressType AS LSPK_COMPRESS_TYPE
+	Dim maybeZlib As BOOL
+	Dim i AS Long
+
+	' 圧縮フォーマットが確定するまで6つぐらい検査
+	For i=0 To 5
+		compressType = lspk->checkCompressType(i)
+		if compressType = LSPK_CTYPE_UNKNOWN Then
+			continue
+		Else if compressType = LSPK_CTYPE_ZLIB_2 Then
+			maybeZlib = TRUE
+			continue
+		End If
+
+		maybeZlib = FALSE
+		ExitFor
+	Next
+
+	if maybeZlib Then
+		compressType=LSPK_CTYPE_ZLIB
+		debug
+	Endif
+
+	PrintPtr(ex"PkInfo:\n")
+	if lspk->pk.getHandle() = NULL Then
+		PrintPtr(ex" (PK file not loaded.)\n")
+	Else
+		PrintPtr(Ex" File Size : ")
+		PrintDataCap(lspk->pk.lengthQWord(),TRUE)
+		PrintPtr(Ex"\n")
+	Endif
+
+	printf(Ex" Compress Type : %s\n",_
+		LSPK_COMPRESS_TYPE_TEXT_TBL[compressType]		
+	)
+
+
+	PrintPtr(ex"\n")
 End Sub
