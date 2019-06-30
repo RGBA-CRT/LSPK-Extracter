@@ -68,6 +68,10 @@ Public
 	pkh As PKH_READER
 	pfs As PFS_READER
 	pk As File
+
+	' 圧縮タイプを手動設定する場合はopenArchiveのあとでやってください
+	compressType As LSPK_COMPRESS_TYPE
+
 Private
 	pkPath As FilePath
 	lastErrorID As LSPK_ARCHIVE_ERROR
@@ -106,6 +110,9 @@ Public
 				lastErrorGLE = GetLastError()
 				ExitFunction
 			Endif			
+
+			'pk の圧縮タイプを検出
+			compressType = autoDetectcmpType()
 		Endif
 
 '		If bNoPFS=FALSE Then ret += pfs.LoadPfsFile( pkPath.genAddedPath(".pfs"))
@@ -186,6 +193,73 @@ Public
 		getLastErrorText = LSPK_ARHIVE_ERROR_TEXT_TBL[lastErrorID]
 	EndFunction
 
+
+	Function autoDetectcmpType() AS LSPK_COMPRESS_TYPE
+		Dim cmpType AS LSPK_COMPRESS_TYPE
+		Dim maybeZlib As BOOL
+		Dim i AS Long
+
+		' 圧縮フォーマットが確定するまで6つぐらい検査
+		For i=0 To 5
+			cmpType = checkCompressType(i)
+			if cmpType = LSPK_CTYPE_UNKNOWN Then
+				continue
+			Else if cmpType = LSPK_CTYPE_ZLIB_2 Then
+				maybeZlib = TRUE
+				continue
+			End If
+
+			maybeZlib = FALSE
+			ExitFor
+		Next
+
+		if maybeZlib Then
+			cmpType=LSPK_CTYPE_ZLIB
+			debug
+		Endif
+
+		autoDetectcmpType = cmpType
+	End Function
+		
+
+	'----------------------------------------
+	'
+Private
+	'指定フォルダの再帰調査を開始
+	Function start_slove(dirId As Long,bFindDir As BOOL) As LSPK_FINDHANDLE
+		Dim ret As LSPK_FINDHANDLE,dirInfo As *LSPK_DIRINFO
+		ret=calloc(sizeof(LSPK_FINDDATA))
+
+		dirInfo = getDirInfo(dirId)
+		ret->isDir=bFindDir
+		ret->parentDir = dirInfo
+		If bFindDir Then
+			ret->current=dirInfo->info->start_child_dir
+			ret->stop = ret->current + dirInfo->info->child_dir_count
+		Else
+			ret->current=dirInfo->info->start_child_file
+			ret->stop=ret->current+dirInfo->info->child_file_count
+		End If
+
+		start_slove=ret
+	EndFunction
+
+	'ファイル名を返す NULL返しで終了　解放不要
+	Function next_sloveFile(hFind As LSPK_FINDHANDLE) As BytePtr
+		If hFind->current >= hFind->stop Then ExitFunction
+		next_sloveFile=pfs.GetFileStr(hFind->current)		
+		hFind->current++
+	End Function
+
+	'次のディレクトリ
+	Function next_sloveDir(hFind As LSPK_FINDHANDLE) As *LSPK_DIRINFO
+		If hFind->current >= hFind->stop Then ExitFunction
+		next_sloveDir=getDirInfo(hFind->current)
+		hFind->current++
+	End Function
+
+	'----------------------------------------
+
 	Function checkCompressType(id AS DWord) AS LSPK_COMPRESS_TYPE
 		Dim fileInfo AS *PKH_INFO_BLOCK
 		fileInfo = pkh.GetPkhInfoBlock(id)
@@ -232,43 +306,6 @@ Public
 		checkCompressType = ret
 	End Function
 
-	'----------------------------------------
-	'
-Private
-	'指定フォルダの再帰調査を開始
-	Function start_slove(dirId As Long,bFindDir As BOOL) As LSPK_FINDHANDLE
-		Dim ret As LSPK_FINDHANDLE,dirInfo As *LSPK_DIRINFO
-		ret=calloc(sizeof(LSPK_FINDDATA))
-
-		dirInfo = getDirInfo(dirId)
-		ret->isDir=bFindDir
-		ret->parentDir = dirInfo
-		If bFindDir Then
-			ret->current=dirInfo->info->start_child_dir
-			ret->stop = ret->current + dirInfo->info->child_dir_count
-		Else
-			ret->current=dirInfo->info->start_child_file
-			ret->stop=ret->current+dirInfo->info->child_file_count
-		End If
-
-		start_slove=ret
-	EndFunction
-
-	'ファイル名を返す NULL返しで終了　解放不要
-	Function next_sloveFile(hFind As LSPK_FINDHANDLE) As BytePtr
-		If hFind->current >= hFind->stop Then ExitFunction
-		next_sloveFile=pfs.GetFileStr(hFind->current)		
-		hFind->current++
-	End Function
-
-	'次のディレクトリ
-	Function next_sloveDir(hFind As LSPK_FINDHANDLE) As *LSPK_DIRINFO
-		If hFind->current >= hFind->stop Then ExitFunction
-		next_sloveDir=getDirInfo(hFind->current)
-		hFind->current++
-	End Function
-
-	'----------------------------------------
 Public
 
 	Sub free_LSPK_FILEINFO(struct As *LSPK_FILEINFO)

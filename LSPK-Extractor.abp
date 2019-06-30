@@ -25,7 +25,6 @@ End Enum
 */
 
 Sub Main()
-	Dim noDecomp As BOOL
 	Dim viewMode As BOOL
 	Dim silent AS BOOL
 	Dim target AS String
@@ -33,10 +32,15 @@ Sub Main()
 	Dim findName AS BytePtr
 	Dim cmd AS CommandLine
 	Dim i aS Long
+	Dim compressType As LSPK_COMPRESS_TYPE
+	Dim decompressMethod As LSPK_DECOMPRESS_METHOD
+
+	compressType = LSPK_CTYPE_UNKNOWN
+	decompressMethod=LSPK_DM_NULL
 
 	silent=TRUE
 #IFDEF _DEBUG
-	cmd.ParseCommandLine("lp archive.pk /e ")
+	cmd.ParseCommandLine("lp boot.pk /v /dec DSDecmp.exe")
 #ENDIF
 
 	For i = 1 To cmd.GetCount()
@@ -46,7 +50,7 @@ Sub Main()
 
 		Elseif cmd.cmpCmd(i,"/e") then
 			Print "Extract only Mode (no decompress)"
-			noDecomp=TRUE
+			decompressMethod=LSPK_DM_NODECOMP
 
 		Elseif cmd.cmpCmd(i,"/v") then
 			Print "Verbose mode."			
@@ -58,6 +62,12 @@ Sub Main()
 			Print "Find file : %s"
 			viewMode=TRUE
 
+		Else if cmd.cmpCmd(i,"/zlib") then
+			compressType = LSPK_CTYPE_ZLIB
+
+		Else if cmd.cmpCmd(i,"/lz1x") then
+			compressType = LSPK_CTYPE_LZ1X
+
 		Elseif cmd.cmpCmd(i,"/dec") then
 			i++
 			setDecompExeName(cmd.GetCmd(i))
@@ -68,6 +78,7 @@ Sub Main()
 			Else
 				printf(ex"decompresser : %s\n",decPath)
 			End If
+			decompressMethod = LSPK_DM_EXE
 
 		Else
 			if IsFilePath(cmd.GetCmd(i))=TRUE Then
@@ -82,7 +93,7 @@ Sub Main()
 	if viewMode Then
 		viewArchive(target)
 	Else
-		extractArchive(target,noDecomp,silent)
+		extractArchive(target, silent, compressType, decompressMethod)
 	End If
 
 End Sub
@@ -122,31 +133,55 @@ Sub viewArchive(target AS BytePtr)
 	Print "-";Date$();Time$()
 End Sub
 
+Enum LSPK_DECOMPRESS_METHOD
+	LSPK_DM_NULL
+	LSPK_DM_NODECOMP
+	LSPK_DM_DLL
+	LSPK_DM_EXE
+End Enum
+
 Type LSPK_EA_USERDATA
 	cLSPK AS *LSPK_ARCHIVE
 	dirName AS BytePtr
-	noDecomp AS BOOL
+	decompMethod AS LSPK_DECOMPRESS_METHOD
 	silent AS BOOL
 End Type
 
-Sub extractArchive(target AS BytePtr, noDecomp AS BOOL, silent AS BOOL)
+Sub extractArchive(target AS BytePtr, silent AS BOOL, compressType As LSPK_COMPRESS_TYPE, decMethod As LSPK_DECOMPRESS_METHOD)
 	Dim lspk As LSPK_ARCHIVE,conf AS LSPK_EA_USERDATA
 	if lspk.openArchive(target)=FALSE Then
 '		Print "OpenError"
 		printf("Archive Open Error!!! GLE=%d",GetLastError())
 		'ExitSub
 	End If
+
+	' 圧縮タイプの指定がある場合は設定
+	if compressType <> LSPK_CTYPE_UNKNOWN Then
+		lspk.compressType = compressType
+	Endif
 	
 	printPkInfo(VarPtr(lspk))
 
 	conf.cLSPK=VarPtr(lspk)
 	conf.dirName=lspk.getArchiveName()
-	conf.noDecomp=noDecomp
+'	conf.noDecomp=noDecomp
 	conf.silent=silent
+
+	if decMethod = LSPK_DM_NULL Then
+		if lspk.compressType = LSPK_CTYPE_ZLIB Then
+			conf.decompMethod = LSPK_DM_DLL
+		Else
+			conf.decompMethod = LSPK_DM_EXE
+		End If
+	Else
+		conf.decompMethod = decMethod
+	Endif
 
 	CreateDirectory(conf.dirName,ByVal NULL)
 	
 	PrintPtr(Ex"Extracting.")
+	if conf.silent = FALSE Then PrintPtr(ex"\n")
+
 	lspk.slvDir(0,FALSE,NULL,AddressOf(extractCallback),VarPtr(conf),0)
 
 	printf(Ex"\ntotal dir %d, file %d\n",lspk.pfs.GetAllDirCount(),lspk.pfs.GetAllFileCount())
@@ -217,7 +252,7 @@ Function extractCallback(hFind As LSPK_FINDHANDLE,info As VoidPtr,path As *FileP
 		Endif
 
 		SetLastError(0)
-		if saveFile(conf->cLSPK,info,savep.ptr)=FALSE  then 
+		if saveFile(conf->cLSPK,info,savep.ptr, conf)=FALSE  then 
 			if conf->silent Then PrintPtr(Ex"\n")
 
 			if cur->pkh->com_size = 0 Then
@@ -231,7 +266,7 @@ Function extractCallback(hFind As LSPK_FINDHANDLE,info As VoidPtr,path As *FileP
 			ExitFunction
 		End If
 		
-		if conf->noDecomp=FALSE Then ExecDecompress(savep.ptr)
+		if conf->decompMethod=LSPK_DM_EXE Then ExecDecompress(savep.ptr)
 	End If
 	extractCallback=TRUE
 End Function
@@ -250,27 +285,42 @@ Function ExecDecompress(fileName As BytePtr) As BOOL
 End Function
 
 'PKファイルの中身を保存
-Function saveFile(cLA As *LSPK_ARCHIVE,info As *LSPK_FILEINFO,saveFileName As BytePtr) As BOOL
-	Dim buffer As BytePtr
+Function saveFile(cLA As *LSPK_ARCHIVE,info As *LSPK_FILEINFO,saveFileName As BytePtr, config As *LSPK_EA_USERDATA) As BOOL
+	Dim buffer As BytePtr, decompressedBuf AS BytePtr
 
-/*	buffer=cLA->getFileBuffer(info)
-	if buffer=NULL Then debug*/
 	buffer=cLA->getFileBuffer(info)
 	if buffer=NULL Then 
 		ExitFunction
 	endif
 
-/*	Dump(buffer,64,info->pkh->offset)
-	Print "gwl;";GetLastError()
-*/
+	Dim fileSize As DWord
+	if config->decompMethod = LSPK_DM_DLL Then
+		'解凍する
+		decompressedBuf = calloc(info->pkh->dec_size)
+		fileSize = lspkDecompress(buffer, info->pkh->com_size, decompressedBuf, info->pkh->dec_size, cLA->compressType)
+
+	Else
+		'解答しない
+		decompressedBuf = buffer
+		fileSize = info->pkh->com_size
+
+	End If
+
 	Dim out As *File
 	out = new File()
 	if out->openFile(saveFileName,GENERIC_WRITE)=FALSE Then ExitFunction
+
 	out->write(buffer,info->pkh->com_size)
+
 	out->close()
 	delete out
 
-	free(buffer)
+	if decompressedBuf <> buffer Then
+		free(decompressedBuf) : decompressedBuf = NULL
+	Endif
+
+	free(buffer) : buffer = NULL
+
 	saveFile=TRUE
 End Function
 
@@ -319,28 +369,7 @@ End Sub
 
 
 Sub printPkInfo(lspk AS *LSPK_ARCHIVE)
-	Dim compressType AS LSPK_COMPRESS_TYPE
-	Dim maybeZlib As BOOL
-	Dim i AS Long
 
-	' 圧縮フォーマットが確定するまで6つぐらい検査
-	For i=0 To 5
-		compressType = lspk->checkCompressType(i)
-		if compressType = LSPK_CTYPE_UNKNOWN Then
-			continue
-		Else if compressType = LSPK_CTYPE_ZLIB_2 Then
-			maybeZlib = TRUE
-			continue
-		End If
-
-		maybeZlib = FALSE
-		ExitFor
-	Next
-
-	if maybeZlib Then
-		compressType=LSPK_CTYPE_ZLIB
-		debug
-	Endif
 
 	PrintPtr(ex"PkInfo:\n")
 	if lspk->pk.getHandle() = NULL Then
@@ -352,9 +381,16 @@ Sub printPkInfo(lspk AS *LSPK_ARCHIVE)
 	Endif
 
 	printf(Ex" Compress Type : %s\n",_
-		LSPK_COMPRESS_TYPE_TEXT_TBL[compressType]		
+		LSPK_COMPRESS_TYPE_TEXT_TBL[lspk->compressType]		
 	)
 
 
 	PrintPtr(ex"\n")
 End Sub
+
+
+Function lspkDecompress(srcBuf AS BytePtr, srcLen AS DWord, destBuf AS BytePtr, destLen AS DWord, comType AS LSPK_COMPRESS_TYPE) AS BOOL
+	printf(ex"comType:%d\n", comType)
+
+
+End Function
