@@ -4,12 +4,19 @@
 'v2.1 : 圧縮フォーマット推定機能追加, オプション変更
 
 #include<RGBALib.sbp>
+#include<abcdecl.sbp>
+#include<zlib.sbp>
 #include "LSPK-lib.sbp"
 #console
 Const DEFAULT_DECOMPRESSER = "DSDecmp.exe"
 Dim decPath As BytePtr
 
 Print ex"The Last Story .pk .pkh .pfs Extracter v2.1         Programmed by RGBA_CRT 2016-2019\n"
+
+Dim zlib AS ZlibWrapper
+if zlib.init() = FALSE Then
+	Print "zlib not available"
+End If
 
 'デフォルトでDSD
 setDecompExeName(DEFAULT_DECOMPRESSER)
@@ -40,7 +47,7 @@ Sub Main()
 
 	silent=TRUE
 #IFDEF _DEBUG
-	cmd.ParseCommandLine("lp boot.pk /v /dec DSDecmp.exe")
+	cmd.ParseCommandLine("lp archive.pk /v ")
 #ENDIF
 
 	For i = 1 To cmd.GetCount()
@@ -170,6 +177,11 @@ Sub extractArchive(target AS BytePtr, silent AS BOOL, compressType As LSPK_COMPR
 	if decMethod = LSPK_DM_NULL Then
 		if lspk.compressType = LSPK_CTYPE_ZLIB Then
 			conf.decompMethod = LSPK_DM_DLL
+			if zlib.isUsable() = FALSE Then
+				Print "Error: zlib not found."
+				debug
+				end
+			End If
 		Else
 			conf.decompMethod = LSPK_DM_EXE
 		End If
@@ -182,9 +194,17 @@ Sub extractArchive(target AS BytePtr, silent AS BOOL, compressType As LSPK_COMPR
 	PrintPtr(Ex"Extracting.")
 	if conf.silent = FALSE Then PrintPtr(ex"\n")
 
+	' 時間計測
+	Dim lt AS DWord
+	lt = GetTickCount()
+
+	' 展開開始
 	lspk.slvDir(0,FALSE,NULL,AddressOf(extractCallback),VarPtr(conf),0)
 
-	printf(Ex"\ntotal dir %d, file %d\n",lspk.pfs.GetAllDirCount(),lspk.pfs.GetAllFileCount())
+	' タイマーストップ
+	lt = GetTickCount() - lt
+	
+	printf(ex"\ntotal dir %d, file %d, process time %dms\n",lspk.pfs.GetAllDirCount(),lspk.pfs.GetAllFileCount(),lt)
 End Sub
 
 'ファイルリストアップ
@@ -286,7 +306,7 @@ End Function
 
 'PKファイルの中身を保存
 Function saveFile(cLA As *LSPK_ARCHIVE,info As *LSPK_FILEINFO,saveFileName As BytePtr, config As *LSPK_EA_USERDATA) As BOOL
-	Dim buffer As BytePtr, decompressedBuf AS BytePtr
+	Dim buffer As BytePtr, saveBuffer AS BytePtr
 
 	buffer=cLA->getFileBuffer(info)
 	if buffer=NULL Then 
@@ -296,12 +316,22 @@ Function saveFile(cLA As *LSPK_ARCHIVE,info As *LSPK_FILEINFO,saveFileName As By
 	Dim fileSize As DWord
 	if config->decompMethod = LSPK_DM_DLL Then
 		'解凍する
-		decompressedBuf = calloc(info->pkh->dec_size)
-		fileSize = lspkDecompress(buffer, info->pkh->com_size, decompressedBuf, info->pkh->dec_size, cLA->compressType)
+		saveBuffer = calloc(info->pkh->dec_size)
+		if lspkDecompress(buffer, info->pkh->com_size, saveBuffer, info->pkh->dec_size, cLA->compressType,ByVal VarPtr(fileSize)) = FALSE Then
+			' 割とデータエラーで解凍できないことがある。
+			' エラー発生時は生のママ保存する
+			free(saveBuffer)
+			saveBuffer = buffer
+			fileSize = info->pkh->com_size
+		Else
+			' 成功時
+			fileSize = info->pkh->dec_size
+
+		End If
 
 	Else
 		'解答しない
-		decompressedBuf = buffer
+		saveBuffer = buffer
 		fileSize = info->pkh->com_size
 
 	End If
@@ -310,13 +340,13 @@ Function saveFile(cLA As *LSPK_ARCHIVE,info As *LSPK_FILEINFO,saveFileName As By
 	out = new File()
 	if out->openFile(saveFileName,GENERIC_WRITE)=FALSE Then ExitFunction
 
-	out->write(buffer,info->pkh->com_size)
+	out->write(saveBuffer,fileSize)
 
 	out->close()
 	delete out
 
-	if decompressedBuf <> buffer Then
-		free(decompressedBuf) : decompressedBuf = NULL
+	if saveBuffer <> buffer Then
+		free(saveBuffer) : saveBuffer = NULL
 	Endif
 
 	free(buffer) : buffer = NULL
@@ -388,9 +418,36 @@ Sub printPkInfo(lspk AS *LSPK_ARCHIVE)
 	PrintPtr(ex"\n")
 End Sub
 
+Function lspkDecompress(srcBuf AS BytePtr, srcLen AS DWord, destBuf AS BytePtr, destLen AS DWord, comType AS LSPK_COMPRESS_TYPE,ByRef newSize AS Long) AS BOOL
+'	printf(ex"comType:%d\n", comType)
 
-Function lspkDecompress(srcBuf AS BytePtr, srcLen AS DWord, destBuf AS BytePtr, destLen AS DWord, comType AS LSPK_COMPRESS_TYPE) AS BOOL
-	printf(ex"comType:%d\n", comType)
+	if comType = LSPK_CTYPE_ZLIB Then
+		newSize = destLen
 
+		Dim zlib_ret AS Long
+		zlib_ret = zlib.uncompress(destBuf, ByVal VarPtr(newSize), srcBuf, srcLen)
 
-End Function
+		if zlib_ret = Z_DATA_ERROR Then
+			if srcLen = destLen Then
+				' srcLen = destLen のとき、無圧縮データが格納されている場合が多い。
+				' エラーではないので、zlib_retを握りつぶす
+				zlib_ret = Z_OK
+				memcpy(destBuf,srcBuf, destLen)
+			Else
+				debug
+			End If
+		End If
+
+		if zlib_ret <> Z_OK Then
+			printf(ex"zlib uncompress error: %d\n", zlib_ret)
+			lspkDecompress = FALSE
+			debug
+			if zlib_ret <> -3 then debug
+		Else
+			lspkDecompress = TRUE
+		Endif
+
+	Else
+		printf("Unsupported compress format.\n")
+	End If
+End Function 
