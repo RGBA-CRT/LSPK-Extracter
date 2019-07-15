@@ -29,7 +29,7 @@ Dim LSPK_DECOMPRESS_METHOD_LABEL[_LSPK_DM_COUNT] = [ _
 Const DEFAULT_DECOMPRESSER = "DSDecmp.exe"
 Dim decPath As BytePtr
 
-Print ex"The Last Story .pk .pkh .pfs Extracter v3.0         Programmed by RGBA_CRT 2016-2019\n"
+Print ex"The Last Story .pk .pkh .pfs Extractor v3.0         Programmed by RGBA_CRT 2016-2019\n"
 
 Dim zlib AS ZlibWrapper
 zlib.init()

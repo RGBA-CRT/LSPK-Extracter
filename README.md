@@ -24,7 +24,7 @@ Usage : LSPK-Extractor [/v][/l][/e][/dec exename] pkfile
         /lz11 - force lz11 decompress mode
 
 > ./LSPK-Extractor.exe boot.pk /v
-The Last Story .pk .pkh .pfs Extracter v3.0         Programmed by RGBA_CRT 2016-2019
+The Last Story .pk .pkh .pfs Extractor v3.0         Programmed by RGBA_CRT 2016-2019
 
 Verbose mode.
 Load:boot.pfs
@@ -51,15 +51,6 @@ total dir 14, file 217, process time 1482ms
 
 ```
 
-## about pk-unpack.exe
-廃止しました。This function was deprecated.
-
-+ ~~pkファイルとpkhファイルを使いって展開を行います。~~  
-+ ~~pfsファイルがない場合に使ってください。  ~~
-+ ~~拡張子がtxtで出力されていますが、中身はバイナリの場合があります。  ~~
-+ ~~This is unpacker that disuse .pfs file.~~
-+ ~~Extracted files extention are .txt, but contents are may be binary data.~~ 
-
 ## compress type
 + zlib, lz11圧縮に対応しています。
 + v3.0以降では圧縮タイプを自動判定します。また、zlib1.dll, lz11.dllによって解凍されます。
@@ -67,11 +58,6 @@ total dir 14, file 217, process time 1482ms
 + This extractor supports zlib or lz11 compress type.
 + In v3.0 or later, the compression type is automatically judged.
 + It is also extracted by zlib1.dll, lz11.dll.
- + ~~LastStory以外のゲームで、圧縮にzlibが使われているものがある。~~
- + ~~その場合、opensslをインストールし、LSPK-Extractor.exe boot.pk /dec zlib.bat~~
- + ~~というようにすると、zlib解凍される。~~
- + ~~zlib.batのところを変更すれば様々な形式に対応できるはず。~~
- + ~~default decompresser is DSDecmp. /dec option able to change decompresser.~~
 
 ## File format infomation
 ファイルフォーマットについては以下をご覧ください。  
