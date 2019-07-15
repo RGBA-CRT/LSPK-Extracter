@@ -60,7 +60,7 @@ Sub Main()
 
 	silent=TRUE
 #IFDEF _DEBUG
-	cmd.ParseCommandLine("lp boot.pk /v ")
+	cmd.ParseCommandLine("lp filesystem.pk /v ")
 #ENDIF
 
 	For i = 1 To cmd.GetCount()
@@ -164,8 +164,8 @@ Sub extractArchive(target AS BytePtr, silent AS BOOL, compressType As LSPK_COMPR
 	Dim lspk As LSPK_ARCHIVE,conf AS LSPK_EA_USERDATA
 	if lspk.openArchive(target)=FALSE Then
 '		Print "OpenError"
-		printf("Archive Open Error!!! GLE=%d",GetLastError())
-		'ExitSub
+		printf(ex"Archive Open Error!!! \nInternalError: [%d]%s\nSystemError: %d",lspk.getLastErrorID(), LSPK_ARHIVE_ERROR_TEXT_TBL[lspk.getLastErrorID()], GetLastError())
+		ExitSub
 	End If
 
 	' 圧縮タイプの指定がある場合は設定
@@ -186,17 +186,20 @@ Sub extractArchive(target AS BytePtr, silent AS BOOL, compressType As LSPK_COMPR
 		conf.decompMethod = decMethod
 	Endif
 	
-	if lspk.compressType = LSPK_CTYPE_ZLIB Then
-		if zlib.isUsable() = FALSE Then
-			Print "Error: zlib not found."
-			end
+	' DLL展開の場合 DLL存在チェック
+	if conf.decompMethod = LSPK_DM_DLL Then
+		if lspk.compressType = LSPK_CTYPE_ZLIB Then
+			if zlib.isUsable() = FALSE Then
+				Print "Error: zlib not found."
+				end
+			End If
+		Else if lspk.compressType = LSPK_CTYPE_LZ1X then
+			if lz11.isUsable() = FALSE Then
+				Print "Error: decompress module lz11.dll not found."
+				end
+			End If
 		End If
-	Else if lspk.compressType = LSPK_CTYPE_LZ1X then
-		if lz11.isUsable() = FALSE Then
-			Print "Error: lz11.dll not found."
-			end
-		End If
-	End If
+	Endif
 	
 	if conf.silent = FALSE Then
 		printf(ex"Decompress Type: %s\nDecompress Method: %s\n\n", LSPK_COMPRESS_TYPE_TEXT_TBL[lspk.compressType], LSPK_DECOMPRESS_METHOD_LABEL[conf.decompMethod])

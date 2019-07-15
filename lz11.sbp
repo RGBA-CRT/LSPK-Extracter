@@ -21,7 +21,7 @@ Public
 		flist[c].ptr=VarPtr(lz11_decompress)
 		flist[c].alias="lz11_decompress@20"		:	c++
 
-		hDll = DynamicDllLoader("lz11.dll",flist,c)
+		hDll = DynamicDllLoader("lz11.dll",flist,c,FALSE)
 		if hDll <> NULL Then _
 			init = TRUE
 	End Function

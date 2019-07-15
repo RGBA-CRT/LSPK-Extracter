@@ -41,10 +41,10 @@ End Enum
 
 Dim LSPK_ARHIVE_ERROR_TEXT_TBL[_LSPK_ERR_COUNT] = [ _
 	"No error",_
-	"Can't open PKH file.",_
+	"Can not open PKH file.",_
 	"Unknown PKH File Format. (invalid Block Size)",_
-	"LSPK_ERR_PFS",_
-	"LSPK_ERR_PK",_
+	"PFS file error.",_
+	"PK file error.",_
 ] AS BytePtr
 
 Enum LSPK_COMPRESS_TYPE
@@ -84,7 +84,7 @@ Public
 		
 		pkPath.SetPath(pkPathStr)
 		pkPath.deleteExtension()
-'debug
+debug
 		If bNoPKH=FALSE Then 
 			lastErrorID = pkh.LoadPkhFile(pkPath.genAddedPath(".pkh"))
 			If lastErrorID <> LSPK_OK Then
@@ -573,6 +573,7 @@ Public
 		hFile=OpenFile(FileName,GENERIC_READ)
 		If hFile=-1 then 
 			LoadPkhFile = LSPK_ERR_PKH_OPEN
+			ExitFunction
 		Endif
 
 		'Init Memory
