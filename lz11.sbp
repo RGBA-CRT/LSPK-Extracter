@@ -1,0 +1,34 @@
+Enum LZ11_ERROR
+	LZ_OK = 0
+	LZ_UNKNOWN_FORMAT
+	LZ_BUFFER_ERROR
+	LZ_DATA_ERROR
+End Enum
+
+Class lz11_DllWrapper
+Private 
+	hDll AS HANDLE
+Public
+	lz11_getDecompressedSize AS *Function (src As BytePtr, srcLen AS DWord) As DWord
+	lz11_decompress As *Function (src AS BytePtr, srcLen AS DWord, dst AS BytePtr, dstLen AS DWord, ByRef decompressedLen AS DWord) AS LZ11_ERROR
+
+	Function init() AS BOOL
+		Dim flist[20] AS DLL_FUNCTION_CELL,c AS Long
+
+		flist[c].ptr=VarPtr(lz11_getDecompressedSize)
+		flist[c].alias="lz11_getDecompressedSize@8"	:	c++
+
+		flist[c].ptr=VarPtr(lz11_decompress)
+		flist[c].alias="lz11_decompress@20"		:	c++
+
+		hDll = DynamicDllLoader("lz11.dll",flist,c)
+		if hDll <> NULL Then _
+			init = TRUE
+	End Function
+
+	Function isUsable() AS BOOL
+		if hDll <> NULL Then isUsable = TRUE
+	End Function
+
+
+End Class

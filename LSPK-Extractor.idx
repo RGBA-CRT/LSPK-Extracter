@@ -6,3 +6,4 @@
 
 'プロジェクト内のプログラム ファイル
 #include "LSPK-lib.sbp"
+#include "lz11.sbp"

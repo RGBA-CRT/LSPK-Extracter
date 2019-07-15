@@ -30,7 +30,6 @@ Typedef LSPK_CALLBACK = *Function(hFind As LSPK_FINDHANDLE,info As VoidPtr,path 
  *  ディレクトリまたはファイルが見つかるとこーーるバックが呼ばれる。
  *　コールバック関数は、呼ばれたらディレクトリかファイルかを判断し、表示やファイルの保存などを行う。
  */
-
 Enum LSPK_ARCHIVE_ERROR
 	LSPK_OK  = 0
 	LSPK_ERR_PKH_OPEN

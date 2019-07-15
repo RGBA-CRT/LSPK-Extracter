@@ -3,10 +3,27 @@
 'v2.0 : PKH24（4GB以上対応版）に対応
 'v2.1 : 圧縮フォーマット推定機能追加, オプション変更
 
+Enum LSPK_DECOMPRESS_METHOD
+	LSPK_DM_NULL = 0
+	LSPK_DM_NODECOMP
+	LSPK_DM_DLL
+	LSPK_DM_EXE
+	_LSPK_DM_COUNT
+End Enum
+
+Dim LSPK_DECOMPRESS_METHOD_LABEL[_LSPK_DM_COUNT] = [ _
+	"Unknown",_
+	"Not decompress",_
+	"Using decompressor DLL",_
+	"Using command line",_
+	"_LSPK_DM_COUNT"
+] AS BytePtr
+
 #include<RGBALib.sbp>
 #include<abcdecl.sbp>
 #include<zlib.sbp>
 #include "LSPK-lib.sbp"
+#include "lz11.sbp"
 #console
 Const DEFAULT_DECOMPRESSER = "DSDecmp.exe"
 Dim decPath As BytePtr
@@ -14,22 +31,18 @@ Dim decPath As BytePtr
 Print ex"The Last Story .pk .pkh .pfs Extracter v2.1         Programmed by RGBA_CRT 2016-2019\n"
 
 Dim zlib AS ZlibWrapper
-if zlib.init() = FALSE Then
-	Print "zlib not available"
-End If
+zlib.init()
+
+Dim lz11 AS lz11_DllWrapper
+lz11.init()
 
 'デフォルトでDSD
 setDecompExeName(DEFAULT_DECOMPRESSER)
 Main()
 End
 
-/*
-Enum LSPK_MODE
-	LSPKM_EXTRACT
-	LSPKM_VIEW
-	LSPKM_FIND
-End Enum
-*/
+
+
 
 Sub Main()
 	Dim viewMode As BOOL
@@ -47,7 +60,7 @@ Sub Main()
 
 	silent=TRUE
 #IFDEF _DEBUG
-	cmd.ParseCommandLine("lp archive.pk /v ")
+	cmd.ParseCommandLine("lp boot.pk /v ")
 #ENDIF
 
 	For i = 1 To cmd.GetCount()
@@ -140,13 +153,6 @@ Sub viewArchive(target AS BytePtr)
 	Print "-";Date$();Time$()
 End Sub
 
-Enum LSPK_DECOMPRESS_METHOD
-	LSPK_DM_NULL
-	LSPK_DM_NODECOMP
-	LSPK_DM_DLL
-	LSPK_DM_EXE
-End Enum
-
 Type LSPK_EA_USERDATA
 	cLSPK AS *LSPK_ARCHIVE
 	dirName AS BytePtr
@@ -175,19 +181,27 @@ Sub extractArchive(target AS BytePtr, silent AS BOOL, compressType As LSPK_COMPR
 	conf.silent=silent
 
 	if decMethod = LSPK_DM_NULL Then
-		if lspk.compressType = LSPK_CTYPE_ZLIB Then
-			conf.decompMethod = LSPK_DM_DLL
-			if zlib.isUsable() = FALSE Then
-				Print "Error: zlib not found."
-				debug
-				end
-			End If
-		Else
-			conf.decompMethod = LSPK_DM_EXE
-		End If
+		conf.decompMethod = LSPK_DM_DLL
 	Else
 		conf.decompMethod = decMethod
 	Endif
+	
+	if lspk.compressType = LSPK_CTYPE_ZLIB Then
+		if zlib.isUsable() = FALSE Then
+			Print "Error: zlib not found."
+			end
+		End If
+	Else if lspk.compressType = LSPK_CTYPE_LZ1X then
+		if lz11.isUsable() = FALSE Then
+			Print "Error: lz11.dll not found."
+			end
+		End If
+	End If
+	
+	if conf.silent = FALSE Then
+		printf(ex"Decompress Type: %s\nDecompress Method: %s\n\n", LSPK_COMPRESS_TYPE_TEXT_TBL[lspk.compressType], LSPK_DECOMPRESS_METHOD_LABEL[conf.decompMethod])
+	End If
+
 
 	CreateDirectory(conf.dirName,ByVal NULL)
 	
@@ -317,6 +331,7 @@ Function saveFile(cLA As *LSPK_ARCHIVE,info As *LSPK_FILEINFO,saveFileName As By
 	if config->decompMethod = LSPK_DM_DLL Then
 		'解凍する
 		saveBuffer = calloc(info->pkh->dec_size)
+		if info->pkh->hash = &HF8FEF72F Then debug
 		if lspkDecompress(buffer, info->pkh->com_size, saveBuffer, info->pkh->dec_size, cLA->compressType,ByVal VarPtr(fileSize)) = FALSE Then
 			' 割とデータエラーで解凍できないことがある。
 			' エラー発生時は生のママ保存する
@@ -421,33 +436,55 @@ End Sub
 Function lspkDecompress(srcBuf AS BytePtr, srcLen AS DWord, destBuf AS BytePtr, destLen AS DWord, comType AS LSPK_COMPRESS_TYPE,ByRef newSize AS Long) AS BOOL
 '	printf(ex"comType:%d\n", comType)
 
+	Dim lib_ret AS Long
+
 	if comType = LSPK_CTYPE_ZLIB Then
 		newSize = destLen
 
-		Dim zlib_ret AS Long
-		zlib_ret = zlib.uncompress(destBuf, ByVal VarPtr(newSize), srcBuf, srcLen)
+		lib_ret = zlib.uncompress(destBuf, ByVal VarPtr(newSize), srcBuf, srcLen)
 
-		if zlib_ret = Z_DATA_ERROR Then
+		if lib_ret = Z_DATA_ERROR Then
 			if srcLen = destLen Then
 				' srcLen = destLen のとき、無圧縮データが格納されている場合が多い。
 				' エラーではないので、zlib_retを握りつぶす
-				zlib_ret = Z_OK
+				lib_ret = Z_OK
 				memcpy(destBuf,srcBuf, destLen)
 			Else
 				debug
 			End If
 		End If
 
-		if zlib_ret <> Z_OK Then
-			printf(ex"zlib uncompress error: %d\n", zlib_ret)
+		if lib_ret <> Z_OK Then
+			printf(ex"zlib uncompress error: %d\n", lib_ret)
 			lspkDecompress = FALSE
 			debug
-			if zlib_ret <> -3 then debug
+			if lib_ret <> -3 then debug
+		Else
+			lspkDecompress = TRUE
+		Endif
+
+	Elseif comType = LSPK_CTYPE_LZ1X Then
+		lib_ret = lz11.lz11_decompress(srcBuf, srcLen, destBuf, destLen, ByVal VarPtr(newSize))
+
+		if lib_ret <> LZ_OK Then
+			if srcLen = destLen Then
+				' srcLen = destLen のとき、無圧縮データが格納されている場合が多い。
+				' エラーではないので、zlib_retを握りつぶす
+				lib_ret = LZ_OK
+				memcpy(destBuf,srcBuf, destLen)
+			Else
+				debug
+			End If
+		End If
+
+		if lib_ret <> LZ_OK Then
+			printf(ex"lz11 uncompress error: %d\n", lib_ret)
+			lspkDecompress = FALSE
 		Else
 			lspkDecompress = TRUE
 		Endif
 
 	Else
-		printf("Unsupported compress format.\n")
+		printf(ex"[Err]Unsupported compress format.\n")
 	End If
 End Function 
