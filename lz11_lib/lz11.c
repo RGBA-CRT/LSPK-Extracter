@@ -1,6 +1,8 @@
 /*----------------------------------------------------------
- * ActiveBasic to C Transformation helper v0.0
- *                       PROGRAMMED BY RGBA_CRT 2018-10
+ * LZ10 / LZ11 decompress library.
+ * Programmed by RGBA_CRT 2019
+ * referenced : https://problemkaputt.de/gbatek.htm
+ * referenced : DSDecmp source
  *----------------------------------------------------------*/
 
 #include <stdint.h>
@@ -11,42 +13,9 @@
 #include <windows.h>
 #include<stdio.h>
 
-/* これを忘れると gcc でコンパイルした時に DllMain が実行されない */
-#ifdef __cplusplus
-extern "C" {
-#endif
-
-/*
- * DLLエントリポイント関数の型と典型的なスケルトンコード
- */
-BOOL APIENTRY /* int __stdcall */
-DllMain(HINSTANCE hInstance, DWORD ul_reason_for_call, LPVOID pParam)
-{
-    switch (ul_reason_for_call) {
-    case DLL_PROCESS_ATTACH:
-        /* ここにグローバル変数等の初期化コードを書く */
-        /* ※loaddll でDLLをロードした時はここが実行される */
-        break;
-    
-    case DLL_PROCESS_DETACH:
-        /* ここにグローバル変数等の後始末コードを書く */
-        /* ※freedll でDLLをアンロードした時はここが実行される */
-        break;
-    
-    case DLL_THREAD_ATTACH:
-        /* ここにスレッド毎に必要な変数等の初期化コードを書く */
-        break;
-    
-    case DLL_THREAD_DETACH:
-        /* ここにスレッド毎に必要な変数等の後始末コードを書く */
-        break;
-    }
+BOOL WINAPI DllMain(HINSTANCE hinstDLL, DWORD fdwReason, LPVOID lpvReserved){
     return TRUE;
 }
-
-#ifdef __cplusplus
-}
-#endif
 
 uint32_t __stdcall lz11_getDecompressedSize(uint8_t *src, int32_t srcLen) {
 	if ((srcLen > 4) && ((src[0] & 0xFE) == 0x10))

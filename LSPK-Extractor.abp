@@ -2,6 +2,7 @@
 'v1.0 : 書き直し
 'v2.0 : PKH24（4GB以上対応版）に対応
 'v2.1 : 圧縮フォーマット推定機能追加, オプション変更
+'v3.0 : DLLによるネイティブな解凍に対応
 
 Enum LSPK_DECOMPRESS_METHOD
 	LSPK_DM_NULL = 0
@@ -28,7 +29,7 @@ Dim LSPK_DECOMPRESS_METHOD_LABEL[_LSPK_DM_COUNT] = [ _
 Const DEFAULT_DECOMPRESSER = "DSDecmp.exe"
 Dim decPath As BytePtr
 
-Print ex"The Last Story .pk .pkh .pfs Extracter v2.1         Programmed by RGBA_CRT 2016-2019\n"
+Print ex"The Last Story .pk .pkh .pfs Extracter v3.0         Programmed by RGBA_CRT 2016-2019\n"
 
 Dim zlib AS ZlibWrapper
 zlib.init()
@@ -60,7 +61,7 @@ Sub Main()
 
 	silent=TRUE
 #IFDEF _DEBUG
-	cmd.ParseCommandLine("lp filesystem.pk /v ")
+	cmd.ParseCommandLine("lp  ")
 #ENDIF
 
 	For i = 1 To cmd.GetCount()
@@ -85,7 +86,7 @@ Sub Main()
 		Else if cmd.cmpCmd(i,"/zlib") then
 			compressType = LSPK_CTYPE_ZLIB
 
-		Else if cmd.cmpCmd(i,"/lz1x") then
+		Else if cmd.cmpCmd(i,"/lz11") then
 			compressType = LSPK_CTYPE_LZ1X
 
 		Elseif cmd.cmpCmd(i,"/dec") then
@@ -119,7 +120,7 @@ Sub Main()
 End Sub
 
 Sub PrintUsage()
-	printf(ex"Usage : PrintUsaget [/v][/l][/e][/dec exename] pkfile\n\t/v - Verbose mode.\n\t/l - Listup files.\n\t/e - Extract only (do not decompless) mode.\n\t/dec - Chenge decompresser.\n")
+	printf(ex"Usage : LSPK-Extractor [/v][/l][/e][/dec exename] pkfile\n\t/v - Verbose mode.\n\t/l - Listup files.\n\t/e - Extract only (do not decompless) mode.\n\t/dec exename - Use commandline decompresser. (deprecated)\n\t/zlib - force zlib decompress mode\n\t/lz11 - force lz11 decompress mode\n")
 EndSub
 
 Sub setDecompExeName(exename As BytePtr)
@@ -164,7 +165,7 @@ Sub extractArchive(target AS BytePtr, silent AS BOOL, compressType As LSPK_COMPR
 	Dim lspk As LSPK_ARCHIVE,conf AS LSPK_EA_USERDATA
 	if lspk.openArchive(target)=FALSE Then
 '		Print "OpenError"
-		printf(ex"Archive Open Error!!! \nInternalError: [%d]%s\nSystemError: %d",lspk.getLastErrorID(), LSPK_ARHIVE_ERROR_TEXT_TBL[lspk.getLastErrorID()], GetLastError())
+		printf(ex"Archive Open Error!!! \nInternalError: [%d]%s\nSystemError: %d\n\n",lspk.getLastErrorID(), LSPK_ARHIVE_ERROR_TEXT_TBL[lspk.getLastErrorID()], GetLastError())
 		ExitSub
 	End If
 

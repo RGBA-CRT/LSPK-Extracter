@@ -9,7 +9,7 @@
 #include <stdio.h>
 #include "lz11.h"
 
-//https;//problemkaputt.de/gbatek.htm;
+//https;//problemkaputt.de/gbatek.htm
 
 
 int main(void) {
