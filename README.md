@@ -53,14 +53,18 @@ total dir 14, file 217, process time 1482ms
 
 ## compress type
 + zlib, lz11圧縮に対応しています。
+    + The Last Story is lz11 compression.
+    + Fate/EXTELLA is zlib compression.
+    + Soul Sacrifice Delta is zlib compression.
 + v3.0以降では圧縮タイプを自動判定します。また、zlib1.dll, lz11.dllによって解凍されます。
-+ コマンドライン方式の解凍(/decオプション)はバグるので使わないことを推奨します。
 + This extractor supports zlib or lz11 compress type.
+    + The Last Story is lz11 compression.
+    + Fate/EXTELLA is deflate(zlib) compression.
+    + Soul Sacrifice Delta is deflate(zlib) compression.
 + In v3.0 or later, the compression type is automatically judged.
 + It is also extracted by zlib1.dll, lz11.dll.
 
-## File format infomation
-ファイルフォーマットについては以下をご覧ください。  
+## File format infomation  
  + http://forum.xentax.com/viewtopic.php?f=10&t=5938  
  + http://rgbacrt.seesaa.net/article/437742154.html  
 
